@@ -1,0 +1,1426 @@
+============================
+PirObject Programming Manual
+============================
+
+
+
+-----------------
+Table Of Contents
+-----------------
+
+1) Introduction (With An Example)
+
+2) The Data Object Definition File
+
+3) PirObject Methods
+
+4) XML Representation
+
+5) Examples And Tricks
+
+6) History, Limitations, And Criticism
+
+
+
+---------------------------------
+1) Introduction (With An Example)
+---------------------------------
+
+This document describes a Perl module called PirObject.pm that
+provides a mechanism for designing and accessing simple data
+containers. It is intended for computer programmers and software
+architects that work on small-size or medium-size applications. The
+data containers (or 'objects') are specified using a short external
+text file, and afterwards the programmer is given automatically a
+set of methods to create, access, load and save them. The best way
+to present what this module does is to give a quick example, so
+here it is.
+
+Assume we want to process a set of records that describe books. A
+book has a title, an author (with first and last names), a publication
+year, and a set of keywords (e.g. "drama", "poetry" etc). A typical
+Perl programmer would code each data object describing each book using
+the raw Perl data structures, e.g. hash tables and arrays:
+
+    # This is an example of the raw Perl way to process data objects
+    my %book;
+    $book{"title"}    = "Pride And Prejudice";
+    $book{"keywords"} = [ "drama", "romance", ];
+
+But as the book structure becomes more complex over the years (as
+it happens to most applications as time goes by), the code to access
+the book's data fields would also get more and more cumbersome.
+Furthermore, a book hash table like expressed above cannot easily
+be shared or sent to another application; in order to do that the
+programmer would have to find a way to "print" the structure somehow,
+using a data dumper for instance.
+
+Here is the way a similar "book" data object would be designed and
+accessed using PirObject.pm. First an external file (called the
+"object definition file") would be created that describe the fields
+of the book. The file would be called "Book.pir". Without showing
+all the details of the file (see the next section for that) here
+is an excerpt of what it would contain:
+
+    - PerlClass     PirObject::Book
+    - FieldsTable
+    # Field name            Sing/Array/Hash Type            Comments
+    #---------------------- --------------- --------------- -----------------------
+    first                   single          string          Author's first name
+    last                    single          string          Author's last name
+    title                   single          string          Book title
+    year                    single          int4            Year of publication
+    keywords                array           string          List of keywords
+
+Now, a sample Perl application that wants to use this "data model"
+would simply do this:
+
+    use PirObject;
+    PirObject->LoadDataModel("Book"); # will parse the file "Book.pir"
+
+    my $book = new PirObject::Book (
+       title    => "Pride And Prejudice",
+       first    => "Jane",
+       last     => "Austen",
+       keywords => [ "drama", "romance", ],
+    );
+    $book->set_year(1805);   # not sure of the real year btw!
+    print "Title is: ", $book->get_title(), "\n";
+    $book->ObjectToFile("pride.xml");
+    my $reloaded_book = PirObject::Book->FileToObject("pride.xml");
+    print "The DTD follows:\n", $book->WholeModelDTD();
+
+The sample code above introduces some of the features of the PirObject
+"Book" that was defined by loading the file "Book.pir".
+
+    - The data container is a Perl blessed object of the class
+      "PirObject::Book". 
+
+    - You can create new blank objects with the method new() without
+      any arguments (not shown above). Or (as shown) you can create
+      new objects with some "data fields" already filled in by giving
+      the new() method some key-value pairs that correspond to the object
+      definition.
+
+    - Once you have an object (such as $book above), you can
+      explicitly set any field of the object using a method called
+      "set_XXX()" where XXX is the name of the field. One set_XXX()
+      method is created for you for each field of the object definition.
+
+    - Similarly, a "get_XXX()" method is also provided to get the value
+      of the field XXX.
+
+    - You can store (and reload) an object to (and from) a file using the 
+      two methods ObjectToFile() and FileToObject(). The data object's
+      structure and data fields will be dumped as a XML document, which
+      in the example above would look like this:
+
+        <Book>
+          <first>Jane</first>
+          <last>Austen</last>
+          <title>Pride And Prejudice</title>
+          <year>1805</year>
+          <keywords struct="array" type="string">
+            <string>drama</string>
+            <string>romance</string>
+          </keywords>
+        </Book>
+
+    - The XML representation of the object can readily be used by other
+      applications; it is also easily parsable and searchable and since
+      it is not arbitrary (the structure for ALL PirObjects is
+      strictly constrained) it can be transformed automatically into
+      a database schema or reloaded meaningfully by other systems
+      even if they are not using PirObject.pm. (The XML philosophy
+      is discussed in more details further down). XML documents
+      can be sent to arbitrary filehandles, not just disk files, so
+      this enables applications to stream data objects through pipes
+      and sockets.
+
+    - The PirObject module can automatically provide you with a DTD
+      that describe the XML documents that correspond to each data
+      object. DTDs are NOT used by the module itself (after all,
+      it already knows what each object is supposed to look like in XML)
+      but a DTD can still be useful to provide to other applications.
+      In our sample code, the WholeModelDTD() method creates the
+      following DTD:
+
+        <!-- ************************************************************ -->
+        <!--                             Book                             -->
+        <!-- ************************************************************ -->
+
+        <!ELEMENT Book ( first? , last? , title? , year? , keywords? )>
+        <!ELEMENT first ( #PCDATA )>
+        <!ELEMENT last ( #PCDATA )>
+        <!ELEMENT title ( #PCDATA )>
+        <!ELEMENT year ( #PCDATA )>
+        <!ELEMENT keywords ( string? , null? )>
+        <!ATTLIST keywords struct CDATA #FIXED "array">
+        <!ATTLIST keywords type   CDATA #FIXED "string">
+
+        <!-- ************************************************************ -->
+        <!--                       Reserved Tags                          -->
+        <!-- ************************************************************ -->
+
+        <!ELEMENT int1   ( #PCDATA )>
+        <!ELEMENT int2   ( #PCDATA )>
+        <!ELEMENT int4   ( #PCDATA )>
+        <!ELEMENT int8   ( #PCDATA )>
+        <!ELEMENT string ( #PCDATA )>
+        <!ELEMENT key    ( #PCDATA )>
+        <!ELEMENT null      EMPTY   >
+
+There is one final feature that we need to introduce in this section.
+The value of a field can be something more than simply a number, a
+string or an array of numbers or strings: it can be OTHER object
+definitions, as expressed by other .pir files. In order to demonstrate
+this, let's create a new .pir file that describes a book's character.
+Appropriately, the file is called "Character.pir" and its most
+essential content looks like this:
+
+    - PerlClass  PirObject::Character
+    - FieldsTable
+    # Field name            Sing/Array/Hash Type            Comments
+    #---------------------- --------------- --------------- -----------------------
+    first                   single          string          Character's first name
+    last                    single          string          Character's last name
+    role                    single          string          Character's role in book
+
+(Note that this new object definition shares a few data field names
+(such as "first" and "last") with the Book's definition, but this
+is just a coincidence)
+
+The Character data object can be used individually just like the
+Book data object, and you can create, load and save independent
+PirObject::Character objects just like any other. However, here we
+want to demonstrate how we can incorporate the Character objects
+inside the book object's definition, in a structured way. To do
+this, we need to modify the Book's "FieldsTable" definition, to add
+two new fields called "maincharacter" and "othercharacters". Here
+is what the entire (new) FieldsTable in "Book.pir" now looks like:
+
+    # Field name            Sing/Array/Hash Type            Comments
+    #---------------------- --------------- --------------- -----------------------
+    first                   single          string          Author's first name
+    last                    single          string          Author's last name
+    title                   single          string          Book title
+    year                    single          int4            Year of publication
+    keywords                array           string          List of keywords
+    maincharacter           single          <Character>     The main character
+    othercharacters         array           <Character>     Any other characters
+
+Notice that the "type" column for the two new fields look like
+an XML tag; this is done on purpose to highlight the fact that the
+values for these two fields are not simple scalars or arrays,
+but they are instead entire Character data objects embedded inside
+the Book data object. Here is now a piece of code that demonstrate
+how the new Book and Character structures can be created and accessed.
+
+    use PirObject;
+    PirObject->LoadDataModel("Book"); # Will load BOTH Book.pir and Character.pir!
+
+    my $book = PirObject::Book->FileToObject("pride.xml"); # from prev example
+    my $ebennet = new PirObject::Character (
+        first => "Ilizabeth",   # misspelled on purpose
+        last  => "Bennet",
+        role  => "Heroine",   # not the drug!
+    );
+    my $jbennet = new PirObject::Character (
+        first => "Jane",
+        last  => "Bennet",
+        role  => "Sister of Elizabeth",
+    );
+    my $collins = new PirObject::Character (
+        first => "Mister",  # well, not really a first name...
+        last  => "Collins",
+        role  => "Idiot",
+    );
+
+    my $others = [ $jbennet, $collins, ]; # array of Character objects
+    $book->set_maincharacter($ebennet);  # a single Char object
+    $book->set_othercharacters($others); # the array of two Char objects
+    $book->get_maincharacter()->set_first("Elizabeth"); # fix spelling
+    $book->ObjectToFile("pride2.xml");
+
+The XML document created in "pride2.xml" in the last Perl statement
+would look like this:
+
+        <Book>
+          <first>Jane</first>
+          <last>Austen</last>
+          <title>Pride And Prejudice</title>
+          <year>1805</year>
+          <keywords struct="array" type="string">
+            <string>drama</string>
+            <string>romance</string>
+          </keywords>
+          <maincharacter struct="single" type="Character">
+            <Character>
+              <first>Elizabeth</first>
+              <last>Bennet</last>
+              <role>Heroine</role>
+            </Character>
+          </maincharacter>
+          <othercharacters struct="array" type="Character">
+            <Character>
+              <first>Jane</first>
+              <last>Bennet</last>
+              <role>Sister of Elizabeth</role>
+            </Character>
+            <Character>
+              <first>Mister</first>
+              <last>Collins</last>
+              <role>Idiot</role>
+            </Character>
+          </othercharacters>
+        </Book>
+
+This concludes the introduction to PirObject.pm; there are many
+more features in this package, but they are documented in the
+reference sections below. I believe that this intro can provide you
+with a better sense of what this module is about, and what it is
+and what it isn't. You should see by now that using a suitable set
+of .pir files, one can easily describe a complex data model that
+will be easy to maintain and extend without having to change the
+code that maintains the XML representation. It is the main objective.
+It has been found in the past that this module was most useful in
+projects where the data models got extended regularly, and since
+here it involves simply editing a few plain text files (the .pir
+files), this process is simple and robust.
+
+
+
+----------------------------------
+2) The Data Object Definition File
+----------------------------------
+
+This section describes the format of the .pir files that are
+written by the user of the PirObject module. Before we start
+on the details of the content of these files, there are two
+other properties we need to talk about: the file NAMES and
+their LOCATION on the filesystem.
+
+a) File name:
+
+    An object definition file needs to be called by a simple
+    alphanumeric name with a .pir extension, e.g. "Book.pir",
+    "Address.pir", "Ticket.pir", "Person.pir", "Gene.pir". The name
+    should start with a letter and may be followed by other letters,
+    digits or underscores. So "Person18OrOlder.pir" and
+    "Text_2_Location.pir" are also acceptable. The name of the
+    file up to the .pir extension WILL be used as the main XML tag
+    that surrounds the data object, when it is saved in XML.
+
+b) Location:
+
+    The directory (or directories) were the .pir files are stored
+    is entirely up to you; we suggest you create a subdirectory
+    somewhere called "PirModels" where you store all (and only) the
+    .pir files. You can put in this directory multiple independent
+    data models, as long as the filenames and XML tags do not
+    conflict. Or you can keep different data models in different
+    subdirectories. It is really up to you.
+
+    However, in order for the PirObject module's LoadDataModel()
+    method to be able to find the files, the path to your directories
+    must at some point be provided to the module. During the
+    installation of the module, there is a single optional configuration
+    step that you can perform where you can hardcode your favorite
+    set of directories. See the INSTALLATION.txt file for more info.
+    Otherwise, at run time, you can specify a set of directories
+    to search using the DataModelPath() method, or you can just
+    make sure the proper directories are specified in the environment
+    variable PIR_DATAMODEL_PATH. See the PirObject Methods section,
+    below.
+
+Now let us look at the content of a .pir file. In the distribution
+of "PirObject.pm", a sample file called "TEMPLATE.pir" is provided. Do
+not edit this file, just keep it around and use it as a starting
+point for your own object definition files. For instance, let's imagine
+you want to recreate the "Book.pir" definition file that we used in
+the Introduction above. You simply need to copy "TEMPLATE.pir" into
+"Book.pir" and then edit it.
+
+The file's content is plain text; it has been designed to be as
+simple and readable as possible. Blank lines and lines that start
+with a "#" character are ignored; use them to comment your data
+definition files and keep them nice-looking. The file "TEMPLATE.pir"
+contains a whole lot of instructions, they are worth reading a few
+times but you might want to remove them once you feel familiar
+enough with the file format.
+
+An object definition file has FOUR mandatory entries that appear
+in order; the are "PerlClass", "InheritsFrom", "FieldsTable" and
+"Methods". Each entry is identified by a line that start with a
+single "-" character and the name of the entry. The first two
+entries only require a single value to be supplied on the same
+line as the entry. The other two entries are blocks of multiple
+lines; the FieldsTable entry also requires a special line
+"- EndFieldsTable" to indicate when it ends. Thus the simplest
+complete object definition file looks like this:
+
+     - PerlClass    PirObject::Dummy
+     - InheritsFrom PirObject
+     - FieldsTable
+     - EndFieldsTable
+     - Methods
+
+It describes a data object that has no field at all. A XML dump of
+such an object would simply produce the two tags
+    <Dummy>
+    </Dummy>
+(this is assuming the file is called "Dummy.pir", of course).
+
+Here is a more complete description of each of the four entries
+of the object definition file.
+
+    - PerlClass PirObject::MyChosenClassName
+
+      The PerlClass entry is where you choose a Perl namespace
+      (or rather a 'Perl class') to handle your data object. In
+      most typical design, this will be a name that start with
+      "PirObject::" to which you append the name that you used for
+      the .pir file itself. So for "Book.pir" for instance, the
+      Perl class specified was "PirObject::Book". You need a distinct
+      namespace for each object definition file, so you cannot reuse
+      the same namespace in multiple object definition file, this
+      would create collisions. The namespaces are used by Perl as
+      independent storage areas where the subroutines (or rather,
+      methods) and variables are stored.
+
+      Nothing prevents you from choosing an arbitrary non-intuitive
+      namespace, such as "The::Lord::Of:The::Rings" for "Book.pir"
+      and "I::Am::Such::A::Great::Guy" for "Person.pir". It would
+      be bad design, however.
+
+      At the Perl level, your data object class that you specify
+      here in PerlClass will almost always be a direct subclass of
+      the "PirObject" main class, which is the top of the hierarchy
+      and is implemented in the file PirObject.pm. Notice that this
+      has NOTHING to do with the DATA hierarchy. For instance, in
+      the Introduction section above, we created two object definition
+      files "Book.pir" (with PerlClass set to PirObject::Book) and
+      Character.pir (with PerlClass set to PirObject::Character)
+      so the Perl class hierarchy looks like this:
+
+                           PirObject
+                            /     \
+                           /       \
+                          /         \
+            PirObject::Book         PirObject::Character
+
+      However, in the data model, each book object has one embedded
+      Character object (for its "maincharacter" field) and a set
+      of Character objects (for its "othercharacters" field). The
+      data model hierarchy looks like this:
+
+                             Book     
+                            /     \
+           (maincharacter) /       \ (othercharacters)
+                          /         \
+                  Character         [ Character, Character, ... ]
+
+      I wrote "almost always" above because the Perl hierarchy CAN
+      be constructed differently too. It's simply that it's not
+      something that is done often; I call this an "advanced" feature
+      and it just happens that this advanced feature is controlled
+      by the next entry of the .pir definition file, called
+      "InheritsFrom".
+
+    - InheritsFrom PirObject
+      or
+    - InheritsFrom NameOfOtherPirDefinition
+
+      This entry of the object definition file format is an
+      "advanced feature". If you are a beginner with the PirObject
+      module, you can simply leave this line to the default value
+      as supplied in the "TEMPLATE.pir" file, which says
+
+                    - InheritsFrom PirObject
+
+      and not look back. It means the data object you will create
+      from this .pir file will be a direct subclass of "PirObject",
+      like it is shown in the first crude diagram of the "PerlClass"
+      entry above.
+
+      However, if you're still reading this, then you want to know
+      what InheritsFrom can do. I assume then that you ALREADY
+      know what the other entries FieldsTable and Methods of the
+      object definition file do. It's necessary to know, because
+      InheritsFrom will affect them.
+
+      Here we go. If you do NOT specify the default special keyword
+      "PirObject" as a value for InheritFrom, then it must be instead
+      the name of another data definition file (another .pir file,
+      without the .pir extension!). For instance, if in "Book.pir"
+      the value of InheritsFrom was set to "Identity", then you
+      must have a file called "Identity.pir" also available along
+      with "Book.pir" elsewhere. As an example, let's say the two
+      files contain the following lines for PerlClass, InheritsFrom
+      and FieldsTable :
+
+          In "Identity.pir" :
+              - PerlClass    PirObject::Identity
+              - InheritsFrom PirObject
+              - FieldsTable
+                  id       single     string   An identifier
+
+          In "Book.pir"     :
+              - PerlClass    PirObject::Book
+              - InheritsFrom Identity
+              - FieldsTable
+                  title    single     string   Book title
+
+      Doing this will have two effects on the data object being
+      defined for <Book>: a) it will no longer be a direct subclass
+      of PirObject, instead it will be a direct subclass of the
+      PerlClass defined in "Identity.pir" (i.e. PirObject::Identity).
+      b) all the fields in the FieldsTable of the definition for
+      Identity will be implicitly inserted at the top of the
+      FieldsTable of Book, and this before the setup for the
+      class PirObject::Book is completed.
+
+      So the end result is that the definition for Book will contain
+      a new data field called "id" defined exactly like in
+      "Identity.pir" and the class PirObject::Book will benefit
+      from any custom methods specified in "Identity.pir".
+
+      This mechanism is useful for coding in a single .pir file a
+      set of common data fields and methods that you want to share
+      among many other object definition. Instead of duplicating
+      the fields and methods in each .pir file, you can put them
+      in a single .pir file (say, "Common.pir") and then specify
+      the appropriate object name (i.e. "Common") in the InheritsFrom
+      entry of all the other .pir files.
+
+      This kind of mechanism can be done on multiple levels, although
+      it becomes harder and harder to imagine why anyone would do
+      that. The only restriction is that you cannot create circular
+      loops between the dependencies of the object definitions, and
+      the top of the class hierarchy HAS to be "PirObject" (obviously).
+
+    - FieldsTable
+      (Note: ended with "- EndsFieldTable")
+
+      This entry of the object definition file describes the "data
+      fields" of the object. Most data fields are simple scalars,
+      such as a single string or number. But you can also make them
+      arrays of such scalars, or one or many other PirObjects. The
+      FieldsTable entry consist of a set of lines with four columns
+      each, separated by white spaces. The file "TEMPLATE.pir" has
+      a comment block that properly identifies the four columns,
+      when we add some sample fields it looks like this:
+
+        # Field name            Sing/Array/Hash Type            Comments
+        #---------------------- --------------- --------------- -----------------------
+        city                    single          string          City name, "Chicago"
+        year                    single          int4            A four digit year
+        petnames                array           string          List of pet names
+        petages                 array           int2            Age of pets
+        maincharacter           single          <Character>     Single Character subobject
+        othercharacters         array           <Character>     List of Character subobjects
+        petname2age             hash            int2            Name-to-age hash
+        petname2vet             hash            <VetRecord>     Name-to-object hash
+
+      The first column is the name of the data field, such as
+      "firstname" or "city" or "othercharacters". You choose it to
+      be appropriate to what kind of data you plan to store in your
+      object.
+
+      The second column must contain one of three possible "structural"
+      keywords: "single", "array" or "hash". It defines how the field
+      will be structured: as a single scalar, as an array, or as a hash
+      table. A more exact definition for the type of the field comes in
+      the third column. The allowed values right now are one of:
+
+            int1     : a one byte long integer
+            int2     : a two bytes long integer
+            int4     : a four bytes long integer
+            int8     : an eight bytes long integer
+            string   : a string of arbitrary length
+            <Obj>    : a PirObject defined by "Obj.pir".
+ 
+      Note that right now, PirObject does not make any distinction
+      between the different flavors of scalars: int1, int2, int4,
+      int8 and string are all treated exactly the same way, and no
+      form of enforcement is performed by the module to make sure
+      that the values you store in your fields match the described
+      type. It is not even specified right now whether the integers
+      are signed or unsigned. We strongly suggest you describe your
+      fields as precisely as possible, however, since there are
+      plans to write software that automatically creates database
+      schemas out of a PirObject data model, and precise types are
+      preferable for such a project to work out. Future PirObject
+      implementation will provide a richer set of type keywords
+      that will match better the typical types used by database
+      systems.
+
+      Hash tables were not presented in the Introduction section;
+      basically, a PirObject can support a data field that will be
+      structured as a hash table. The "type" column describes the
+      type of the VALUES stored in the hash tables, since of course
+      the keys are always strings. The value can be any of the
+      scalar types described above, or they can be other PirObjects.
+
+      The FieldsTable entry of the object definition file need a
+      special line to indicate when the table ends; this is
+      accomplished by a line that says "- EndFieldsTable". This
+      line is mandatory too, even when the FieldsTable is empty.
+
+    - Methods
+
+      This is the last entry of the object definition file, and it
+      goes on until the end of the file. It contains Perl code,
+      usually just a set of sub definitions. This is the place where
+      you can add your own custom methods to the Perl class that
+      handles your data object. By default, the Perl class will get
+      access (through inheritance) to all the methods of PirObject,
+      such as new(), ObjectToFile(), ObjectToFileHandle() etc. It
+      will also get three accession methods for each data field
+      XXX, called get_XXX(), set_XXX() and XXX(). (See the PirObject
+      Methods section, below). You can override here any or all of
+      these methods. If you override one of the methods defined in
+      PirObject, then you can call these methods using the Perl
+      SUPER:: construct. For instance, if you want your objects to
+      automatically get some kind of ID by default whenever they
+      are created by new(), you could override new() in this manner:
+
+              sub new {
+                  my $self = shift; # class or object
+                  my @args = @_
+                  my $new = $self->SUPER::new(@args);
+                  $new->set_id("MyConstantId");
+                  $new;
+              }
+
+      If you want to override one of the field accession methods
+      automatically created for you, you can also do so. In that
+      case, the Perl method that WOULD normally be created for you
+      for the field will still be accessible as AUTO_methodname().
+      E.g., if you have a field called "year", you could override
+      the set_year() method this way to make it more fault tolerant:
+
+              sub set_year {
+                  my $self = shift;  # an object
+                  my $year = shift;  # the argument to set_year()
+                  $year += 1900 if $year < 100; # say the user entered '88' when he meant '1988'.
+                  $self->AUTO_set_year($year); # call the real storage method.
+              }
+
+An object definition file, once created, can be loaded by an
+application using the PirObject method LoadDataModel(). This will
+search a set of directories for the file and then parse and verify
+all the entries described above. If the FieldsTable specify that a
+field's type is another PirObject, then that object's definition
+will also be loaded afterwards, and so on recursively. Similarly,
+if the InheritsFrom contain something other than the default keyword
+"PirObject", then LoadDataModel() will load that OTHER object definition
+file before completing the parsing of the current file.
+
+
+
+--------------------
+3) PirObject Methods
+--------------------
+
+This section describes the methods made available by the PirObject base class.
+They can roughly be divided into these categories:
+
+     a) Data Model Loading Methods:
+
+         DataModelPath()
+         LoadDataModel()
+
+     b) Object Creation And Access Methods:
+
+         new()
+         XXX() set_XXX() get_XXX()
+         SetMultipleFields()
+
+     c) Input/Output Methods:
+
+         ObjectToXML()             XMLToObject()
+         ObjectToFile()            FileToObject()
+         ObjectToFileHandle()      FileHandleToObject()
+         ObjectXMLDocumentHeader()
+         
+     d) Object Cloning:
+
+         ShallowClone()
+         DeepClone()
+
+     e) DTD Generation Methods:
+
+         WholeModelDTD()
+         LocalObjectDTD()
+         ReservedElementsDTD()
+
+     f) Internal Exploration Methods:
+
+        _InfoFieldsOrder()
+        _InfoFields()
+        _InfoArrayHashFields()
+
+Here is the detailed description of all these methods.
+
+     a) Data Model Methods:
+
+         DataModelPath()
+
+         Usage: @directory_path = PirObject->DataModelPath();
+             or
+                PirObject->DataModelPath( @new_dir_path );
+
+             When called with no argument, this method returns the
+             current set of directories to search for the object
+             definition file (the .pir files). The directories are
+             searched by LoadDataModel(), below.
+
+             When called with some arguments, they are interpreted
+             as the set of directories to search. The directories
+             are saved internally in the PirObject's namespace.
+
+             There is a default set of two directories hardcoded
+             in the file PirObject.pm, they are "." (the current
+             directory) and the subdirectory "PirModels" of the
+             current user's own home directory. You can modify this
+             default list at installation time (see the INSTALLATION.txt
+             file). Before this default list are also added
+             automatically the directories specified in the environment
+             variable PIR_DATAMODEL_PATH, if it exists.
+
+         LoadDataModel()
+
+         Usage: PirObject->LoadDataModel("PirObjectName");
+
+             This method will search a set of directories for an
+             object definition file called like its argument, with
+             a ".pir" extension added. The file and its format are
+             described in a separate section above, "The Data Object
+             Definition File". The file is parsed and its content
+             is strictly restricted; when successful, a new Perl
+             class will be added to the Perl runtime environment,
+             which will handle all access to the data object defined
+             in the file.
+
+             Loading a file "PirObjectName.pir" might trigger OTHER
+             internal calls to LoadDataModel(): if any data field
+             in the object model is defined to be another data
+             object, then the appropriate LoadDataModel() call will
+             be made, recursively. Similarly, if the InheritsFrom
+             entry in the data definition file contains a value
+             other than the default "PirObject" keyword, then the
+             object definition file for the InheritsFrom entry will
+             be loaded too.
+
+     b) Object Creation And Access Methods:
+
+         new()
+
+         Usage: $pirobject = PirObjectClass->new()
+             or
+                $pirobject = PirObjectClass->new( field => $val, field => $val ... )
+
+             This method creates blank new data objects. If given
+             arguments, the arguments are then passed to
+             SetMultipleFields() (see below). The "PirObjectClass"
+             in the usage statement above must be one of the Perl
+             class specified by the PerlClass entry in a data object
+             definition file.
+
+         XXX() set_XXX() get_XXX()
+
+         Usage: Getting the value of a field XXX:
+                     $value = $pirobject->XXX();
+                  or $value = $pirobject->get_XXX()
+                Setting the value of a field XXX:
+                     $pirobject->XXX($value);
+                  or $pirobject->set_XXX($value)
+
+             In the usage statements above, "XXX" is the name of
+             one of the data field of your PirObject, as defined
+             by the first column of the FieldsTable of the data
+             definition file. For each such field XXX, three methods
+             called XXX(), get_XXX() and set_XXX() will be created
+             for you. get_XXX() allows you to retrieve the value of
+             field "XXX" in your object; undef is returned if the
+             field has never been set. set_XXX() allows you to set
+             the value. XXX() will act as either get_XXX() or
+             set_XXX() depending on whether or not you supply an
+             argument to it.
+
+             When the field is defined as an array (see the second
+             column of the object definition file), the set_XXX()
+             methods must be called with a Perl reference to an
+             array; in the same way, the get_XXX() method will
+             return such an array reference. When the field is
+             defined as a hash, it is a hash reference that must
+             be supplied and that will be returned. When the field
+             is defined as a single PirObject, then a PirObject
+             itself it used (a blessed reference).
+
+         SetMultipleFields()
+
+          Usage: $pirobject->SetMutlipleFields( field => $val, field => $val ... );
+
+              This method allows the application to set multiple
+              data fields of an object in a single method call.
+              SetMultipleFields() must be given an even set of
+              arguments; even numbered arguments are field names
+              and odd number arguments are their corresponding
+              values. Example:
+
+                 $book->SetMultipleFields( title => "Misery", year => undef, );
+
+              This method is called by new() when new() is given
+              any arguments.
+
+     c) Input/Output Methods:
+
+         ObjectToXML()
+
+         Usage: $xmltext = $pirobject->ObjectToXML($option);
+
+             This method returns as a single string the XML document
+             that correspond to the $pirobject. $option is an
+             optional string (hahaha) that modifies the XML output
+             slightly; it contains keywords separated by a vertical
+             bar "|". Right now the only keyword supported is
+             "showempty", which means the XML output will contain
+             empty XML tags (such as <title/>) for data fields that
+             are not defined. Normally, such fields are simply
+             completely absent from the XML output. Examples:
+
+                $bookxml           = $book->ObjectToXML();
+                $bookxml_emptytags = $book->ObjectToXML("showempty");
+
+         XMLToObject()
+
+         Usage: $pirobject = PirObjectClass->XMLToObject($xmltext);
+
+             This method reconstructs a PirObject from some XML text
+             stored in a single string. Example:
+
+                 $book = PirObject::Book->XMLToObject($bookxml);
+
+             Normally, you should call the method on the PirObjectClass
+             that corresponds to the object you expect to reconstruct,
+             but the base class can also be used for this, since
+             (and this is an secret!) the base class internally
+             keeps a record of which XML tag correspond to which
+             PirObjectClass and will return an appropriately blessed
+             object. This feature is provided so that you can reconstruct
+             an object even if you are not sure WHICH KIND of PirObject
+             you have in your XML document. Example:
+
+                 $book = PirObject->XMLToObject($bookxml);
+             works just as well as
+                 $book = PirObject::Book->XMLToObject($bookxml);
+
+         ObjectToFile() and FileToObject()
+
+         Usage: $pirobject->ObjectToFile($filename, $options);
+                $pirobject = PirObjectClass->FileToObject($filename);
+
+             These two methods act just like their XML string
+             equivalent, ObjectToXML() and XMLToObject(), except
+             that instead of processing the XML documents in a
+             string, they process it in the file specified in
+             $filename. The keywords specified in $option are just
+             the same as in ObjectToXML(). $filename is a pure file
+             name, not a control string like Perl's open() statement.
+             Just like for XMLToObject(), you can use the base class
+             PirObject to call FileToObject(). Examples:
+
+                 $book->ObjectToFile("book.xml","showempty");
+                 $newbook  = PirObject::Book->FileToObject("book.xml");
+                 $newbook2 = PirObject->FileToObject("book.xml"); # same
+
+         ObjectToFileHandle() and FileHandleToObject()
+
+         Usage: $pirobject->ObjectToFileHandle($fh, $options);
+                $pirobject = PirObjectClass->FileHandleToObject($fh);
+                @objarray  = PirObjectClass->FileHandleToObject($fh);
+
+             These two methods act just like their file equivalent,
+             ObjectToFile() and FileToObject(), except that it's
+             the programmer's responsibility to properly open the
+             filehandles that are given in argument, for writing
+             or reading. The filehandles will NOT be closed after
+             the operations are completed, so they can be used to
+             implement a STREAM of XML PirObject documents.
+
+             The FileHandleToObject() method has one special behavior:
+             in a scalar context, it will read and reconstruct a
+             single XML object from the filehandle. In an array
+             context, however, it will reconstruct all the objects
+             it can find until the end of file, and return them as
+             an array.
+
+             Just like for XMLToObject() and FileToObject(), the method
+             FileHandleToObject() can be called on the base class PirObject
+             if you are not sure what kind of object you are about to
+             reconstruct. Examples:
+
+                 $book       = PirObject::Book->FileHandleToObject($fh);
+                 $someobject = PirObject->FileHandleToObject($fh);
+
+         ObjectXMLDocumentHeader()
+
+         Usage: $xmheader = $pirobject->ObjectXMLDocumentHeader( $systemdtd );
+
+             This method returns in a string two lines of text that
+             represent a complete XML document header for your
+             object. In conjunction with the ObjectToXXX() methods
+             above, this can be used to build complete XML documents
+             for other applications. $systemdtd is an optional
+             argument that you can use to supply the value of the
+             SYSTEM attribute in the DOCTYPE header line. The default
+             is simply the name of the main XML tag with a ".dtd"
+             extension. Here is an example of the two lines return
+             by the method for the Book object used throughout this
+             manual:
+
+                 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+                 <!DOCTYPE Book SYSTEM "Book.dtd">
+
+             Note that these two lines are absolutely NOT necessary
+             to generate when your applications only access the XML
+             documents through the PirObject module's methods.
+
+     d) Object Cloning:
+
+         DeepClone()
+
+         Usage: $newcopy = $pirobject->DeepClone();
+
+             This method will return a new object of the same class
+             as $pirobject, with exactly the same values for all
+             the fields. The copying will be performed on the
+             ENTIRE data hierarchy, so that even subobjects of the
+             main object will be copied in turn. The two objects,
+             $newcopy and $pirobject, will be completely independent:
+             modifying one (no matter how deep in its data hierarchy)
+             will not affect the other.
+
+         ShallowClone()
+
+         Usage: $newshallowcopy = $pirobject->ShallowClone();
+
+             This method works just like DeepClone(), except that
+             the $newshallowcopy object returned will not be a
+             completely independent data structure from the original
+             $pirobject; the single scalar fields (such as int1,
+             int2, strings etc) will be copied but the fields that
+             are stored as references (such as arrays, hashes, or
+             other subobjects) will be shared between the two
+             objects. For instance:
+
+                 $book2 = $book->ShallowClone();
+                 $book2->set_title("Something"); # will not affect $book's title
+                 $book2->get_maincharacter()->set_role("OOps"); # WILL affect book's main character!
+
+     e) DTD Generation Methods:
+
+         WholeModelDTD()
+
+         Usage: $dtdstring = $pirobject->WholeModelDTD();
+
+             DTDs are NOT used at all by the PirObject module;
+             however they can be generated automatically with this
+             method in order to simplify data exchanges with other
+             applications or systems that require them.
+
+             This method returns the DTD for an entire data model
+             (an object and all its subobjects, recursively) as a
+             single string. If some data fields are defined with
+             the same names in different data objects, then it will
+             not repeat their definition more than once (it will
+             show the repeated definitions as a comment that start
+             with <!-- MENT ...> instead of <!ELEMENT ...>). It
+             will print a warning on STDERR if the repeated element's
+             definitions conflict, but it will not die. This means
+             the data model definitions should be fixed, by the
+             way.
+
+         LocalObjectDTD()
+
+         Usage: $dtdstring = $pirobject->LocalObjectDTD();
+
+             This is not as useful as WholeModelDTD(): it only returns
+             a DTD excerpt, the one that correspond only to the current
+             object.
+
+         ReservedElementsDTD()
+
+         Usage: $dtdstring = $pirobject->ReservedElementsDTD();
+
+             This method returns a constant block of text that
+             describe the reserved XML tags used by the XML
+             representation of PirObjects, such as <null>,
+             <int4>, <key> etc. It is called automatically by
+             WholeModelDTD().
+
+     f) Internal Exploration Methods:
+
+        _InfoFieldsOrder()
+
+        Usage: $arrayref = PirObjectOrClass->_InfoFieldsOrder();
+
+            This methods returns a reference to an array containing
+            the names of the fields of the object; it's usually
+            exactly the content of the first column of the FieldsTable
+            entry of the object definition file. You can use the
+            content of the array to learn at run time the name of
+            the fields that are defined for an object. DO NOT MODIFY
+            THE ARRAY!
+
+        _InfoFields()
+
+        Usage: $hashref = PirObjectOrClass->_InfoFields();
+
+            This method is similar to _InfoFieldsOrder(), but it
+            returns more information than simply the name of the
+            fields: it returns a ref to a hash table where the keys
+            are the field names and the values are refs to short
+            anonymous arrays with four elements describing the
+            field. The first element is a keyword, one of "single",
+            "array" or "hash". The second element is the type, one
+            of "int1", "int2", "string" etc. If the field contains
+            subobjects, then it will be a string with the name of
+            the subobject surrounded by "<>", just like in the
+            object definition file (e.g. the string "<Character>").
+            The third element is the comment associated with the
+            field. The fourth element is undef for scalar fields,
+            and will be a repeat of the name of the subobjects when
+            the field contains subobjects but without the surrounding
+            "<>" characters.  (e.g. the string "Character"). DO NOT
+            MODIFY ANY PART OF THIS HASH TABLE AND ITS SUB ARRAYS!
+            Example of use:
+
+                my $fieldsinfo = $book->_InfoFields();
+                foreach $field (sort keys %$fieldsinfo) {
+                    my $info = $fieldsinfo->{$field};
+                    my ($sah,$type,$comment,$baretype) = @$info;
+                    print "Field: $field is $sah of $type ($comment)\n";
+                }
+
+        _InfoArrayHashFields()
+
+        Usage: $hashref = PirObjectOrClass->_InfoFields();
+
+            This method is similar to _InfoFields, in that it
+            describe the fields of an object; it returns a ref to
+            a small hash table that associate to each field name
+            either the character "A" when the field is an array,
+            the character "H" when it's a hash, and the empty string
+            otherwise. DO NOT MODIFY THE CONTENT OF THIS HASH.
+
+
+
+---------------------
+4) XML Representation
+---------------------
+
+This section describes the XML representation that is used when
+PirObjects are serialized (expressed as text). XML's potential as
+a medium for sharing data among applications has often been harmed
+by the fact that each application use XML's capabilities in a
+different way. Most XML designs put data information in two places:
+sometimes in the attributes of the tags, sometimes in the #PCDATA
+sections between them. This means that it's impossible to write a
+lightweight generic XML loader, because crucial information could
+be located anywhere. The XML representation used by PirObject is
+very strict. It can be summarized by a few basic rules:
+
+    1- A data object starts and ends with a main pair of simple
+       tags that identify the object:
+
+            <Book>
+            </Book>
+
+    2- Inside the main pair of tags is a set of data fields, each
+       identified by its own pair of tags:
+
+            <Book>
+                <title></title>
+                <author></author>
+                <year></year>
+            </Book>
+
+       The data fields appear at most ONCE. There are NEVER any tag
+       repetition at this level.
+
+    3- The value for each data field is located inside the pair of
+       tags that identify it:
+
+            <Book>
+                <title>Pride And Prejudice</title>
+                <author>Jane Austen</author>
+                <year>1805</year>
+            </Book>
+
+    4- The example above show three "scalar" fields, or simple
+       values. But rule 3 is also true of the field is defined to
+       be something more complex, like another PirObject, an array,
+       or a hash table:
+
+            <Book>
+                <title>Pride And Prejudice</title>
+                <publication_years struct="array" type="int4">
+                    <int4>1805</int4>
+                    <int4>1821</int4>
+                    <int4>1843</int4>
+                </publication_years>
+                <maincharacter struct="single" type="Character">
+                    <Character>
+                        <name>Elizabeth Bennet</name>
+                        <role>Funny Girl</role>
+                    </Character>
+                </maincharacter>
+                <charactertorole struct="hash" type="string">
+                    <key>Elizabeth Bennet</key>
+                    <string>Funny Girl</string>
+                    <key>Jane  Bennet</key>
+                    <string>Sister of Elizabeth</string>
+                </charactertorole>
+            </Book>
+
+       Rules 2, 3 and 4 are obvious when one realize that internally,
+       the data objects are implemented as a reference to an anonymous
+       hash table; the data fields are the keys of the elements of
+       the hash, the values are either simple scalars, references
+       to arrays or hashes, or another object (which is a blessed
+       reference to another hash, of course).
+
+    5- Attributes are not used to store any of the object's data;
+       the only attributes you will see are HINTS about the structure
+       of the XML object. There are only two attributes that are
+       currently implemented, they are "struct" and "type", and
+       they reflect the information stored in the object definition
+       file. They appear only when a field is an array, a hash,
+       or a single subobject. See the example just above. Note that
+       these attributes are not even necessary for the PirObject
+       XML loader to be able to reload the objects; they could be
+       stripped out and the XML object could still be reloaded,
+       since PirObject.pm knows exactly the type and structure of
+       each data field. They are provided as parsing hints for
+       other applications.
+
+    6- #PCDATA information is ONLY found at the very lowest level
+       of the tag tree. You will never see something like this:
+
+           <Book>
+              The story of a proud guy and a prejudiced girl.
+              <title>Pride And Prejudice</title>
+           </Book>
+
+       even though the above XML snippet is perfectly legal standard
+       XML.
+
+    7- There is no support (or need for) XML namespaces. All tags
+       are always simple identifiers, matching the regular expression
+       /^[A-Za-z]\w+$/.
+
+    8- By default, the XML documents produced and read back do not
+       even contain a XML document header, such as
+
+           <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+           <!DOCTYPE Book SYSTEM "Book.dtd">
+
+       However, there is a method called ObjectXMLDocumentHeader()
+       that can create such a header for you. The XML loader does
+       not care about such lines.
+
+    9- PirObject fully supports STREAMS of XML documents. Normally,
+       the whole of a set of multiple XML documents concatenated
+       together is NOT considered a legal XML document. But the
+       input method FileHandleToObject() supplied in the PirObject
+       class supports reading from a file that contains multiple
+       PirObject XML documents concatenated:
+
+            while (my $object = PirObject->FileHandleToObject($readfh)) {
+                 # process $object here
+            }
+
+       In the same way, the method ObjectToFileHandle() can be used
+       to create such a stream of XML documents.
+
+            foreach my $object (@somearrayofobjects) {
+                $object->ObjectToFileHandle($writefh);
+            }
+
+Esthetically, the XML tags for each simple data field are placed
+on separate lines; this allows easy "grepping" through the XML file,
+assuming that your data fields do not contain newlines. The tags
+will be indented by an increasing amount of white space, depending
+on the level of the object and subobjects being dumped by the XML
+dumper.
+
+The XML dumper will use the empty tag "<null/>" as a placeholder
+for entries in arrays and hash tables that contain Perl undefs.
+This allow proper reconstruction of such arrays and hashes.
+
+The XML dumper will escape the three characters "&", "<" and ">"
+using XML entities; these three characters are the minimum set
+necessary to make the XML description non ambiguous; however, it
+means that it is possible to create a data object whose XML
+representation will NOT be legal, if for instance the object contains
+binary data in its fields. The PirObject XML loader written in Perl
+will reload these XML object without any problem, but other
+applications might reject the documents. The solution is NOT to
+store any binary data in your objects. But if only Perl applications
+written using PirObject.pm are to access the XML documents, then
+there are no restrictions: anything you put in your objects will
+be dumped and reloaded correctly, even ASCII nulls and newlines.
+
+In standard XML, a pair of start and end tag that are side by side
+like this:
+      <fieldname></fieldname>
+are considered to be perfectly equivalent to:
+      <fieldname/>
+However, in a PirObject XML document, the first representation will
+be used to denote an empty string value for "fieldname" and the
+second one to denote an undefined value. This is the only semantic
+difference between standard XML and the PirObject XML; it is up to
+the PirObject programmer to be careful with this, since other
+applications will certainly not make the distinction.
+
+
+
+----------------------
+5) Examples And Tricks
+----------------------
+
+Trick 1: The XML representation of most PirObject is easily
+compressible; gzip has been observed to reach a compression
+ratio of 20:1. For large XML objects or large streams of XML
+objects, it can be worth it to compress and uncompress the XML
+text ON THE FLY. It is not only a question of disk space,
+but also a question of time: it might seem counter-intuitive,
+but most modern UNIX systems have processors that are fast
+enough that decompressing a block of data on disk by a factor
+of 20 makes the application run faster because overall there
+are less disk access needed. This is true for both reading
+and writing. Here are two examples:
+
+    # A loop that writes many XML objects to a file
+    my $writefh = new IO::File "|gzip -c >collection.xml.gz"
+       or die "Can't pipe to compression subprocess: $!\n";
+    while (my $obj = CreateSomeObject()) {
+       $obj->ObjectToFileHandle($writefh);
+    }
+    $writefh->close();
+
+
+    # A loop that reads many XML objects from a file
+    my $readfh = new IO::File "gunzip -c <collection.xml.gz|"
+       or die "Can't pipe from decompression subprocess: $!\n";
+    while (my $obj = PirObject->FileHandleToObject($readfh)) {
+        #process $obj here
+    }
+    $readfh->close();
+
+Note that in the previous two examples, the PirObject methods that
+generate (or parse) the XML text have NO idea that the XML text
+goes to (or is fetched from) a subprocess that compress it (or
+uncompress it).
+
+Trick 2: Sometimes it might seem unnecessary to read from a file
+an entire PirObject XML document when you actually only need some
+subobject deeper in the data structure. For example, imagine you
+have in a directory 1000 XML documents of type Book, as describe at
+the end of the Introduction, and that you are ONLY interested in
+sequentially looking at all the <Character> subobjects, without any
+regards for the rest of the <Book> objects. Here is a way to
+open a FileHandle to a file and obtain ONLY the <Character>
+subobjects, as a single stream:
+
+    my $readfh = new IO::File
+        "perl -ne 'print if m#^\\s*<Character># .. m#^\\s*</Character>#;' file.xml |"
+        or die "Can't open read pipe to subprocess: $!\n";
+    while (my $obj = PirObject::Character->FileHandleToObject($readfh)) {
+        # process $obj here; it's a PirObject::Character
+    }
+
+This trick works because the filehandle is connected to a subprocess
+that runs a separate Perl one-liner that filters OUT any line in
+the input file.xml that is outside the pairs of tags <Character>
+and </Character>. This filtering is performed using Perl's ".."
+operator which acts as a flip-flop in a scalar context (see the
+Perl language reference for more info). So the text arriving on the
+file handle in the while loop above looks like a stream of <Character>
+PirObject documents:
+
+    <Character>
+    ...
+    </Character>
+    <Character>
+    ...
+    </Character>
+    etc etc.
+
+If we want to do apply this trick to all 1000 documents, then
+we can simply use a few more UNIX-level commands in the filehandle
+specification to have them all concatenated together:
+
+    my $readfh = new IO::File
+        "/bin/ls -1 | fgrep .xml | xargs cat | perl -ne 'print if m#^\\s*<Character># .. m#^\\s*</Character>#;' |"
+        or die "Can't open read pipe to subprocess: $!\n";
+
+It is outside the scope of this document to explain in detail the
+workings of the piped commands above, see a good UNIX manual.
+
+Finally, please note that it's also possible to use this very same
+trick to REVERSE the filtering done on the input, so for instance
+this can be used to reload lightweight version of all <Book> objects
+without any of the <Character> subobjects. It's simply a matter of
+changing the "if" in the Perl one-liner to a "unless".
+
+Trick 3: At the UNIX command-line level, the command that was used
+in Trick #2 to extract just a subset of lines from a PirObject XML
+file can also be used directly:
+
+    unix% perl -ne 'print if m#^\s*<Obj># .. m#^\s*</Obj>#' *.xml | less
+
+This will run "less" on just a subset of the lines of the XML files,
+the subset that match lines enclosed between <Obj> and </Obj>.
+
+Trick 4: It is possible to load an object definition file without
+calling explicitly LoadDataModel(). The following syntax:
+
+     use PirObject qw( Book Character Address );
+
+will do the same as
+
+     use PirObject;
+     PirObject->LoadDataModel("Book");
+     PirObject->LoadDataModel("Character");
+     PirObject->LoadDataModel("Address");
+
+Multiple use statement will load the PirObject.pm file only once,
+but will STILL load the data model files (as long as they have not
+been loaded). So these two lines together in the same file (or in
+different files) work too:
+
+    use PirObject ( "Book" );       # will load PirObject.pm and Book.pir...
+    use PirObject ( "Character" );  # .. then will load JUST Character.pir
+
+
+
+-------------------------------------
+6) History, Limitations And Criticism
+-------------------------------------
+
+History:
+
+This is a complete re-implementation of a software module called
+"PomObject.pm" that was originally written and used internally at
+Incyte Genomics (now Incyte Corporation) from 2000 to 2004.
+When the company closed its genomics division in Palo Alto, CA,
+management refused to release PomObject to the scientific community,
+for fear of legal problems. I personally attribute this refusal to
+uncertainty about open sourcing software caused by the SCO-IBM
+lawsuit, but who knows, really. The fact is, PirObject is now an
+available replacement. It is just as efficient (I believe it
+can quickly process gigabytes of XML documents like PomObject did)
+and not a single line of code of the original PomObject.pm was
+reused!
+
+There are significant differences between the two modules, because
+I decided that if I have to rewrite the whole thing, I might as
+well make it better:
+
+  - PomObject's data models where not described in text files (what
+    I call here object definition files, with a .pir extension),
+    they were instead described in .pm files that were normal Perl
+    subclasses of the main class PomObject. It meant that whoever
+    was maintaining the data model files had also to be a Perl
+    programmer; with PirObject the data fields can be edited and
+    maintained by a non programmer. Except for the custom methods,
+    of course.
+
+  - PomObject supported "default" values for the fields of an data
+    object, this is not supported by PirObject but can still easily
+    be implemented by overriding the new() method in the Methods
+    section of each object definition file.
+
+  - PomObject supported fields whose type could be one of many
+    different PomObject; this feature was never used, so PirObject
+    does not support that either.
+
+  - The XML documents produced are similar in design philosophy,
+    but not compatibles. PirObject use TWO attributes as hints
+    for the data structure and its type ("struct" and "type"),
+    whereas PomObject only had "type".
+
+  - PomObject's detailed abstract "types" were a clumsy kludge
+    added mid-way; PirObject starts with an already (more or less)
+    well defined set of type keywords, such as "int1", "int2" etc.
+    Remember to use appropriate types, one day there will be
+    automatic SQL database schema creators that would benefit
+    from such precise information.
+
+  - PomObject had the ability to reject (or ignore) XML tags
+    that it did not understand from its input. PirObject doesn't
+    yet have this capability: you must strip the unwanted tags
+    externally (using grep -v for instance?).
+
+Limitations:
+
+- Reloading small and medium-sized XML documents (up to a few
+megabytes big) is efficient on modern UNIX machines; when the size
+reach hundred of megabytes, the amount of memory used by the XML
+tokenizer becomes a problem. That is because the tokenizer reads
+the entire XML document in memory as its first step. Solution: don't
+create XML documents that are hundreds of megabytes big.
+
+- See the note above about empty tags at the end of the "XML
+Representation" section.
+
+- Comments for fields, as specified in the object definition file,
+are not used for anything yet... they will soon be incorporated as
+comments in the DTDs.
+
+Criticism:
+
+- The name itself, "PirObject", doesn't really mean anything.  It's
+true that "Pir" shares many letters with my own name, "Pierre", but
+it's not by vanity. I just chose the letters because they gave the
+word "PirObject" a unique identity (a google search reveals nothing
+particular about it) and it's more or less easy to pronounce. The
+same is true of the .pir extension for the files, it seems .pir
+is not a well-known extension for any file format.
+
+- What's up with the weird "-" format for entries of the .pir files?
+Why not make them XML files themselves, you say? It's a possibility,
+but I wanted to make the .pir file as simple and as pure TEXT as
+possible, so that it could be maintained by a NON programmer (call
+that person the "data model manager") while the programmers just
+load them. XML would have seemed to complex for non technical people.
+(Maybe). I don't like the "-" introducer for each of the entries
+in the file, but for the moment I can't think how I could redesign
+it to keep it as nice looking. Hopefully, .pir files won't change
+much in the future. I realize now for instance that I didn't have
+to put a mandatory "- EndFieldsTable" in it, by the way.
+
+- The distribution should be made into a REAL Perl module distribution,
+like on CPAN, but I don't know how to package this properly... right
+now the INSTALLATION.txt file clearly indicate how easy the package
+is to deploy (there is only a single file, "PirObject.pm", and it
+is pure Perl, no compilation required!) but maybe it won't always
+be as simple. Any volunteers?
+
+Distribution Information:
+
+#
+# Software Distributed under the GNU General Public License.
+#
+# Copyright (C) 2004 Pierre Rioux
+# Montreal, Quebec, Canada, October 2004.
+#
+# Revision History:
+#
+# $Log$
+#
+    

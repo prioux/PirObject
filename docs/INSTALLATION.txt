@@ -1,0 +1,56 @@
+
+================================
+PirObject.pm Installation Manual
+================================
+
+This distribution consists of very few files:
+
+    lib/PirObject.pm             # The main code file
+    PirModels/TEMPLATE.pir       # A sample object definition file
+    docs/PirObjectManual.txt     # The programming guide for PirObject.pm
+    docs/INSTALLATION.txt        # What you are reading right now
+
+    examples/README.txt          # A short text about running the examples.
+    examples/intro1.pl           # The first example in the PirObjectManual
+    examples/intro2.pl           # The second example in the manual
+    examples/get_characters.pl   # A new example
+    examples/Book.pir            # An object definition file used by the examples
+    examples/Character.pir       # Another object definition file.
+
+Installation is straightforward:
+
+1- Place PirObject.pm in a directory accessible by your PERL5LIB
+   search path. It can be a subdirectory of the user's home directory
+   or more generally one of the directories specified by perl's
+   @INC array. A way to check which directories your perl executable
+   will search is to type "perl -V" and to have a look at the content
+   of @INC. You can add directories to this list by setting your
+   PERL5LIB environment variable (or simply PERLLIB in certain
+   cases, be careful). See the "perlrun" man page for more information.
+
+2- Create a directory somewhere where you will keep short text files
+   called "object definition files". We suggest you call this
+   directory "PirModels". The files in PirModels have a ".pir"
+   extension. At first, just keep a read-only copy of TEMPLATE.pir,
+   you will use this file to create your own ".pir" files later on.
+
+3- (OPTIONAL) You can edit PirObject.pm to add one or many site-specific
+   custom search directories for the object definition files; the
+   array to edit is near the top and is called @DATAMODEL_PATH.  So
+   this is the array where you can specify the path of the directory
+   you created in step 2 above. This is the only 'configuration'
+   step that can be performed, and it's optional (search directories
+   can be modified at run time by the applications themselves, so
+   performing this step is not necessary).
+
+This is it. Perl applications and programs should now be able to
+load the module with the line
+
+   "use PirObject;"
+
+at their top. Programmers who intend to to use the module should
+now read AT LEAST the section called "Introduction" of the
+PirObjectManual, and the section "PirObject Methods". To run the
+sample examples, you can go to the examples subdirectory and follow
+the instructions in the file README.txt.
+
