@@ -9,6 +9,7 @@ This distribution consists of very few files:
     PirModels/TEMPLATE.pir       # A sample object definition file
     docs/PirObjectManual.txt     # The programming guide for PirObject.pm
     docs/INSTALLATION.txt        # What you are reading right now
+    docs/GPL_LICENSE.txt         # Text of the GPL license that governs this distribution.
 
     examples/README.txt          # A short text about running the examples.
     examples/intro1.pl           # The first example in the PirObjectManual

@@ -33,6 +33,9 @@
 # Revision history:
 #
 # $Log$
+# Revision 1.1.1.1  2004/10/23 01:04:39  prioux
+# Initial import
+#
 #
 ###########################################################
 
@@ -72,6 +75,12 @@ unshift(@DATAMODEL_PATH,split(/:/,$ENV{"PIR_DATAMODEL_PATH"}))
 # Use to set or get the data model path.
 # This is a set of directories to search for ".pir" files
 # when the LoadDataModel() method is called.
+
+# New feature: any of the entries in the @DATAMODEL_PATH can
+# now be a ref to a hash table instead of a directory name;
+# in that case the hash table will be interpreted as a kind
+# of in-memory file directory, where the key of the entries are
+# filenames and the values their content.
 
 sub DataModelPath {
     my $self = shift;
@@ -130,10 +139,19 @@ sub LoadDataModel {
         my $mod_to_load = shift(@to_load);
         next if exists $XMLTagToPerlClass{$mod_to_load}; # model name is also tag name
         foreach my $dir (@DATAMODEL_PATH) {
-            my $file = "$dir/$mod_to_load.$MODELFILE_EXTENSION";
-            next unless -f $file;
+            my $file    = undef; # filename of external file
+            my $content = undef; # content of file if internal file.
+            if (ref($dir) ne "HASH") {  # Search a real directory
+                $file = "$dir/$mod_to_load.$MODELFILE_EXTENSION";
+                next unless -f $file;
+            } else {  # Search an internal filesystem-in-a-hash. New feature.
+                $file = "$mod_to_load.$MODELFILE_EXTENSION";
+                $content = $dir->{"$mod_to_load.$MODELFILE_EXTENSION"} ||
+                           $dir->{"$mod_to_load"};  # Internaly, we support "Object.pir" as well as "Object".
+                next unless $content;
+            }
             my ($TagName,$PerlClass,$InheritsFrom,@UsedObjects) =
-                $self->_LoadDataModelFromFile($file,$being_loaded);
+                $self->_LoadDataModelFromFile($file,$being_loaded,$content);
             # For the next four scalars, the FIRST round through the loop has the
             # values we want to return in this method.
             @CurrentUsedObjects    = @UsedObjects unless $CurrentTagName;
@@ -163,8 +181,10 @@ sub LoadDataModel {
 sub _LoadDataModelFromFile {
     my $self = shift;
     my $filename = shift;
-    print STDERR "DEBUG: Loading file: $filename\n" if $DEBUG > 0;
     my $being_loaded = shift || [];  # history load stack to check for infinite loops....
+    my $filecontent = shift; # Optional: if file content is already supplied by application.
+
+    print STDERR "DEBUG: Loading file: $filename\n"            if $DEBUG;
 
     my ($TagName) = ($filename =~ m#\b([a-zA-Z]\w*)\.$MODELFILE_EXTENSION$#o);
     die "Error: can't figure out XML Tag name from datamodel file '$filename' ?!?\n"
@@ -172,8 +192,16 @@ sub _LoadDataModelFromFile {
 
     my $class = ref($self) || $self;
 
-    my $fh = new IO::File "<$filename"
-        or die "Can't load datamodel file '$filename': $!\n";
+    my @content = ();
+    if (! $filecontent) {
+        my $fh = new IO::File "<$filename"
+            or die "Can't load datamodel file '$filename': $!\n";
+        @content = <$fh>;
+        $fh->close();
+    } else {
+        @content = split(/\n/,$filecontent); # yuk
+        grep(($_ .= "\n") && 0, @content); # double yuk
+    }
 
     # Values found in the datamodel file
     my $PerlClass    = "";
@@ -185,7 +213,7 @@ sub _LoadDataModelFromFile {
     my $expect = "PerlClass";
 
     PARSEFILE:
-    while (my $line = <$fh>) {
+    while (my $line = shift(@content)) {
         next if $line =~ m/^\s*$|^\s*#/;
         die "Unexpected line in datamodel file '$filename':\nLine: $line"
             unless $line =~ m#^\s*-\s*(\w+)\s*(\S*)\s*$#;
@@ -217,7 +245,7 @@ sub _LoadDataModelFromFile {
 
         if ($section eq "FieldsTable") {
             $expect = "Methods";
-            while ($line = <$fh>) {
+            while ($line = shift(@content)) {
                 next if $line =~ m/^\s*$|^\s*#/;
                 last if $line =~ m#^\s*- EndFieldsTable#;
                 die "Unparsable field definition line in datamodel file '$filename'.\nLine: $line"
@@ -241,9 +269,7 @@ sub _LoadDataModelFromFile {
         }  
 
         if ($section eq "Methods") {
-            while (my $line = <$fh>) {
-                $methods .= $line;
-            }
+            $methods = join("",@content);
             last PARSEFILE;
         }
 

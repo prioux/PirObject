@@ -2,8 +2,10 @@
 Running The Example Programs
 ============================
 
-This document explains how to run the three example programs supplied
+This document explains how to run the four example programs supplied
 with the PirObject distribution.
+
+
 
 Prerequisites:
 
@@ -22,7 +24,11 @@ Prerequisites:
        running the sample scripts from here will allow them to
        find the .pir files.
 
-    3- Run the first example:
+
+
+Running the examples:
+
+     1- Run the first example:
 
            perl intro1.pl
 
@@ -35,14 +41,14 @@ Prerequisites:
        The script will also create the file "pride.xml" in the current
        directory.
 
-     4- Run the second example:
+     2- Run the second example:
 
             perl intro2.pl
 
         This one doesn't produce ANY output at all, but it does
         create a file called "pride2.xml". Have a look.
 
-     5- Run the third example:
+     3- Run the third example:
 
             perl get_characters.pl
 
@@ -51,6 +57,20 @@ Prerequisites:
             Got this character: Elizabeth Bennet, who plays the role of Heroine
             Got this character: Jane Bennet, who plays the role of Sister of Elizabeth
             Got this character: Mister Collins, who plays the role of Idiot
+
+     4- Run the fourth example:
+
+            perl intro2Internal.pl
+
+        This script does exactly the same as intro2.pl, but it demonstrates
+        how to package a data model INSIDE the perl program itself, instead
+        of using external .pir files. "intro2.pl" required "Book.pir" and
+        "Character.pir" to be in the current directory, but
+        "intro2Internal.pl" does not (it contains the two files embedded
+        as strings).
+
+
+Final notes:
 
 Of course, since PirObject is a programming module, the whole point
 of the examples is not to just run them, but to actually LOOK at

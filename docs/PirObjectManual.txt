@@ -300,6 +300,13 @@ on the details of the content of these files, there are two
 other properties we need to talk about: the file NAMES and
 their LOCATION on the filesystem.
 
+Note that a new feature of the PirObject module allows you
+to build and supply the ".pir" files internally in your
+program without actually having the files on a filesystem.
+This feature is documented in the section for the method
+DataModelPath(). For the rest of this discussion, we assume
+the object definition files are real, external files.
+
 a) File name:
 
     An object definition file needs to be called by a simple
@@ -689,6 +696,35 @@ Here is the detailed description of all these methods.
              automatically the directories specified in the environment
              variable PIR_DATAMODEL_PATH, if it exists.
 
+             New Feature Alert! If you'd like your application to
+             build and use an object definition file without
+             having to explicitely write it on the filesystem, you
+             can supply to DataModelPath() a 'fake' or 'virtual'
+             filesystem directory instead of a directory path.
+             A fake directory is simply a ref to a  hash table; in it
+             the keys are the filenames and the values are the contents
+             of the files. So, for instance, a fake directory that
+             contains "Super.pir" and "Hyper.pir" can be created
+             this way:
+
+                  my %fake_dir = (
+                      "Super.pir" => $content_of_super,
+                      "Hyper.pir" => $content_of_hyper,
+                  );
+
+             (The variables $content_of_XXX contain the WHOLE
+             contents of the files as single strings). Then
+             the fake directory can be put into the search path of
+             PirObject by supplying a ref to this hash table to
+             DataModelPath() :
+
+                 PirObject->DataModelPath( ".", \ %fake_dir, "/etc" );
+
+             After this is done, the method LoadDataModel() will find
+             and open the strings in the hash just as if there were
+             real files "Super.pir" and "Hyper.pir" somewhere on the
+             file system.
+
          LoadDataModel()
 
          Usage: PirObject->LoadDataModel("PirObjectName");
@@ -940,7 +976,7 @@ Here is the detailed description of all these methods.
              with <!-- MENT ...> instead of <!ELEMENT ...>). It
              will print a warning on STDERR if the repeated element's
              definitions conflict, but it will not die. This means
-             the data model definitions should be fixed, by the
+             the objet definition files should be fixed, by the
              way.
 
          LocalObjectDTD()
@@ -1335,7 +1371,7 @@ well make it better:
     I call here object definition files, with a .pir extension),
     they were instead described in .pm files that were normal Perl
     subclasses of the main class PomObject. It meant that whoever
-    was maintaining the data model files had also to be a Perl
+    was maintaining the object definition files had also to be a Perl
     programmer; with PirObject the data fields can be edited and
     maintained by a non programmer. Except for the custom methods,
     of course.
@@ -1422,5 +1458,8 @@ Distribution Information:
 # Revision History:
 #
 # $Log$
+# Revision 1.1.1.1  2004/10/23 01:04:39  prioux
+# Initial import
+#
 #
     
