@@ -5,17 +5,18 @@ PirObject.pm Installation Manual
 
 This distribution consists of very few files:
 
-    lib/PirObject.pm             # The main code file
-    PirModels/TEMPLATE.pir       # A sample object definition file
+    lib/PirObject.pm             # The main code file.
+    PirModels/TEMPLATE.pir       # A sample object definition file.
     docs/PirObjectManual.txt     # The programming guide for PirObject.pm
-    docs/INSTALLATION.txt        # What you are reading right now
+    docs/INSTALLATION.txt        # What you are reading right now.
     docs/GPL_LICENSE.txt         # Text of the GPL license that governs this distribution.
 
     examples/README.txt          # A short text about running the examples.
-    examples/intro1.pl           # The first example in the PirObjectManual
-    examples/intro2.pl           # The second example in the manual
-    examples/get_characters.pl   # A new example
-    examples/Book.pir            # An object definition file used by the examples
+    examples/intro1.pl           # The first example in the PirObjectManual.
+    examples/intro2.pl           # The second example in the manual.
+    examples/get_characters.pl   # A new example.
+    examples/intro2Internal.pl   # Variation on second example: uses no external .pir files.
+    examples/Book.pir            # An object definition file used by the examples.
     examples/Character.pir       # Another object definition file.
 
 Installation is straightforward:
