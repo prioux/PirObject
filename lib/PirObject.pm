@@ -33,6 +33,10 @@
 # Revision history:
 #
 # $Log$
+# Revision 1.4  2005/05/16 18:31:21  prioux
+# Combined multiple ATTLIST declarations for single objects,
+# arrays and hashes into a single ATTLIST declaration.
+#
 # Revision 1.3  2005/05/16 17:56:50  prioux
 # Fixed DTD declarations for arrays and hashes;
 # improved esthetic layout of hashes in XML dump;
@@ -768,11 +772,12 @@ sub ObjectXMLDocumentHeader {
     my $maintag = $PerlClassToXMLTag{$class}
        || die "Error: can't find which XML tag is associated with class '$class' ?!?\n";
 
-    $dtd ||= "$maintag.dtd";
+    my $standalone = $dtd ? "yes" : "no";
+    $dtd = $dtd ? "[\n\n$dtd\n\n]" : "SYSTEM \"$maintag.dtd\"";
 
     my $header =
-       qq#<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n# .
-       qq#<!DOCTYPE $maintag SYSTEM "$dtd">\n#;
+       qq#<?xml version="1.0" encoding="UTF-8" standalone="$standalone"?>\n# .
+       qq#<!DOCTYPE $maintag $dtd>\n#;
 
     $header;
 }
