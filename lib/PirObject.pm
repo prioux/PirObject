@@ -33,6 +33,10 @@
 # Revision history:
 #
 # $Log$
+# Revision 1.5  2005/05/16 18:44:22  prioux
+# Improved ObjectXMLDocumentHeader() so that when a proper DTD
+# is passed in argument, the document becomes 'standalone'.
+#
 # Revision 1.4  2005/05/16 18:31:21  prioux
 # Combined multiple ATTLIST declarations for single objects,
 # arrays and hashes into a single ATTLIST declaration.
@@ -772,12 +776,15 @@ sub ObjectXMLDocumentHeader {
     my $maintag = $PerlClassToXMLTag{$class}
        || die "Error: can't find which XML tag is associated with class '$class' ?!?\n";
 
-    my $standalone = $dtd ? "yes" : "no";
-    $dtd = $dtd ? "[\n\n$dtd\n\n]" : "SYSTEM \"$maintag.dtd\"";
+    my $standalone = $dtd eq "standalone" ? "yes" : "no"; # special keyword
+
+    my $headdtd = $dtd ? "SYSTEM \"$dtd\"" : "SYSTEM \"$maintag.dtd\"";
+    $headdtd = "[\n\n" . $self->WholeModelDTD() . "\n\n]"
+        if $standalone eq "yes";
 
     my $header =
        qq#<?xml version="1.0" encoding="UTF-8" standalone="$standalone"?>\n# .
-       qq#<!DOCTYPE $maintag $dtd>\n#;
+       qq#<!DOCTYPE $maintag $headdtd>\n#;
 
     $header;
 }
