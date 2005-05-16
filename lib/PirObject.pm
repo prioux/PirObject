@@ -33,6 +33,13 @@
 # Revision history:
 #
 # $Log$
+# Revision 1.2  2004/12/21 03:55:46  prioux
+# Added support for object definition files that are supplied
+# internally by the application (they no longer HAVE to be
+# external files). See the doc for DataModelPath(). Added
+# the GPL license file to the distribution (I forgot it in
+# my first package...!)
+#
 # Revision 1.1.1.1  2004/10/23 01:04:39  prioux
 # Initial import
 #
@@ -63,7 +70,7 @@ my $MODELFILE_EXTENSION = "pir";
 
 my @DATAMODEL_PATH      = (
     ".",
-    $ENV{"HOME"} . "/PirModels",
+    ($ENV{"HOME"} || ".") . "/PirModels",
 );
 unshift(@DATAMODEL_PATH,split(/:/,$ENV{"PIR_DATAMODEL_PATH"}))
     if $ENV{"PIR_DATAMODEL_PATH"};
@@ -718,14 +725,15 @@ sub ObjectToXML {
             $txt .= "$indent1<$field struct=\"hash\" type=\"$baretype\">\n";
             foreach my $key (sort keys %$val) {
                 my $elem = $val->{$key};
-                $txt .= "$indent2<key>". &_StringEncodeEntities($key) . "</key>\n";
+                $txt .= "$indent2<key>". &_StringEncodeEntities($key) . "</key>";
                 if (!defined($elem)) {
-                    $txt .= "$indent2<null/>\n";
+                    $txt .= "\t<null/>\n";
                     next;
                 }
                 if (! $hasobjects) {
-                    $txt .= "$indent2<$type>" . &_StringEncodeEntities($elem) . "</$type>\n";
+                    $txt .= "\t<$type>" . &_StringEncodeEntities($elem) . "</$type>\n";
                 } else {
+                    $txt .= "\n";
                     $fh and print $fh $txt and $txt = "";
                     $txt .= $elem->ObjectToXML($options,$fh,$level+2);
                 }
@@ -1096,7 +1104,7 @@ sub LocalObjectDTD {
             next;
         }
         if ($sah eq "array") {
-            my $elemdtd = "<!ELEMENT $field ( $baretype? , null? )>\n";
+            my $elemdtd = "<!ELEMENT $field ( ($baretype | null)* )>\n";
             $elemlist->{$field} = $elemdtd;
             $elemdtd =~ s/!ELE/!-- / if $globelemlist->{$field};
             $dtd .= $elemdtd;
@@ -1106,7 +1114,7 @@ sub LocalObjectDTD {
             next;
         }
         if ($sah eq "hash") {
-            my $elemdtd = "<!ELEMENT $field ( key? , $baretype? , null? )>\n";
+            my $elemdtd = "<!ELEMENT $field ( (key , ($baretype | null))* )>\n";
             $elemlist->{$field} = $elemdtd;
             $elemdtd =~ s/!ELE/!-- / if $globelemlist->{$field};
             $dtd .= $elemdtd;
