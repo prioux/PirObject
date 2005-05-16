@@ -33,6 +33,12 @@
 # Revision history:
 #
 # $Log$
+# Revision 1.3  2005/05/16 17:56:50  prioux
+# Fixed DTD declarations for arrays and hashes;
+# improved esthetic layout of hashes in XML dump;
+# fixed problem of use of uninitialized var when
+# accessing the HOME environment variable.
+#
 # Revision 1.2  2004/12/21 03:55:46  prioux
 # Added support for object definition files that are supplied
 # internally by the application (they no longer HAVE to be
@@ -1093,8 +1099,8 @@ sub LocalObjectDTD {
                 $elemdtd =~ s/!ELE/!-- / if $globelemlist->{$field};
                 $dtd .= $elemdtd;
                 next if $globelemlist->{$field};
-                $att .= "<!ATTLIST $field struct CDATA #FIXED \"single\">\n";
-                $att .= "<!ATTLIST $field type   CDATA #FIXED \"$baretype\">\n";
+                $att .= "<!ATTLIST " . $field .                 " struct CDATA #FIXED \"single\"\n";
+                $att .= "          " . (" " x length($field)) . " type   CDATA #FIXED \"$baretype\">\n";
             } else {
                 my $elemdtd = "<!ELEMENT $field ( #PCDATA )>\n";
                 $elemlist->{$field} = $elemdtd;
@@ -1109,8 +1115,8 @@ sub LocalObjectDTD {
             $elemdtd =~ s/!ELE/!-- / if $globelemlist->{$field};
             $dtd .= $elemdtd;
             next if $globelemlist->{$field};
-            $att .= "<!ATTLIST $field struct CDATA #FIXED \"array\">\n";
-            $att .= "<!ATTLIST $field type   CDATA #FIXED \"$baretype\">\n";
+            $att .= "<!ATTLIST " . $field .                 " struct CDATA #FIXED \"array\"\n";
+            $att .= "          " . (" " x length($field)) . " type   CDATA #FIXED \"$baretype\">\n";
             next;
         }
         if ($sah eq "hash") {
@@ -1119,8 +1125,8 @@ sub LocalObjectDTD {
             $elemdtd =~ s/!ELE/!-- / if $globelemlist->{$field};
             $dtd .= $elemdtd;
             next if $globelemlist->{$field};
-            $att .= "<!ATTLIST $field struct CDATA #FIXED \"hash\">\n";
-            $att .= "<!ATTLIST $field type   CDATA #FIXED \"$baretype\">\n";
+            $att .= "<!ATTLIST " . $field .                 " struct CDATA #FIXED \"hash\"\n";
+            $att .= "          " . (" " x length($field)) . " type   CDATA #FIXED \"$baretype\">\n";
             next;
         }
     }
