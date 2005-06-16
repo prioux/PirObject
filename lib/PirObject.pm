@@ -2,6 +2,9 @@
 # PirObject.pm
 #
 # by Pierre Rioux, September 2004.
+#
+# Find more doc and information here:
+#    http://sourceforge.net/projects/pirobject/
 ###########################################################
 
 ###########################################################
@@ -33,6 +36,11 @@
 # Revision history:
 #
 # $Log$
+# Revision 1.6  2005/05/16 19:02:17  prioux
+# Updated ObjectXMLDocumentHeader() so that in order to get
+# a standalone document, you need to supply the keyword
+# "standalone". The DTD is generated internally.
+#
 # Revision 1.5  2005/05/16 18:44:22  prioux
 # Improved ObjectXMLDocumentHeader() so that when a proper DTD
 # is passed in argument, the document becomes 'standalone'.
@@ -84,6 +92,7 @@ my $MODELFILE_EXTENSION = "pir";
 
 my @DATAMODEL_PATH      = (
     ".",
+    "./PirModels",
     ($ENV{"HOME"} || ".") . "/PirModels",
 );
 unshift(@DATAMODEL_PATH,split(/:/,$ENV{"PIR_DATAMODEL_PATH"}))
@@ -1029,7 +1038,7 @@ sub DeepClone {
         }
 
         # Clone array fields
-        if ($what eq "A") {
+        if (defined($what) && $what eq "A") {
             my $array = $clone->{$field};
             if (! $hasobjects) {
                 $clone->{$field} = [ @$array ];  # copies all elements
@@ -1047,7 +1056,7 @@ sub DeepClone {
         }
 
         # Clone hash fields
-        if ($what eq "H") {
+        if (defined($what) && $what eq "H") {
             my $hash = $clone->{$field};
             if (! $hasobjects) {
                 $clone->{$field} = { %$hash };  # copies all keyvals
