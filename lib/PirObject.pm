@@ -36,6 +36,9 @@
 # Revision history:
 #
 # $Log$
+# Revision 1.7  2005/06/16 03:10:52  prioux
+# Fixed warnings with DeepClone() method.
+#
 # Revision 1.6  2005/05/16 19:02:17  prioux
 # Updated ObjectXMLDocumentHeader() so that in order to get
 # a standalone document, you need to supply the keyword
@@ -321,7 +324,7 @@ sub _LoadDataModelFromFile {
             my ($sah,$type,$comment,$hasobjs) = @{$superfields->{$name}};
             $Fields{$name} = [ $sah, $type, $comment ];
         }
-        $InheritsFrom = $inherits;
+        $InheritsFrom = $perlclass;
     }
 
     # At this point, built the code for the methods and store the information
