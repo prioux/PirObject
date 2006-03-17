@@ -36,6 +36,10 @@
 # Revision history:
 #
 # $Log$
+# Revision 1.8  2005/06/28 20:37:30  prioux
+# Fixed bug when using InheritsFrom other than the typical "PirObject"
+# keyword.
+#
 # Revision 1.7  2005/06/16 03:10:52  prioux
 # Fixed warnings with DeepClone() method.
 #
@@ -393,8 +397,9 @@ sub _AddField {
         unless $type =~ m!
                         (int[1248]|string|<[a-zA-Z][a-zA-Z0-9]*>)  # allowed types
                         !x;
-    die "Error in _AddField(): Field name '$name' is a reserved keyword! (Method name of PirObject?)\n"
-        if $class->can($name) || defined &{__PACKAGE__ . "::" . $name};
+    die "Error in _AddField(): Field name '$name' is a reserved method name! (Method name of PirObject?)\n"
+    #    if $class->can($name) || defined &{__PACKAGE__ . "::" . $name};
+        if defined &{__PACKAGE__ . "::" . $name};
     die "Error in _AddField(): Field name '$name' conflicts with a reserved XML tag!\n"
         if $name =~ m#^(key|null|int[1248]|string)$#;
     die "Error in _AddField(): Field name '$name' conflicts with the tag\n" .
@@ -842,14 +847,14 @@ sub XMLTokenArrayToObject {
         $tokens->[$zap]=undef;
     }
 
-    $$posref++ while $tokens->[$$posref] =~ m#^\s*$|^<[!?]#;
+    $$posref++ while $$posref < @$tokens && $tokens->[$$posref] =~ m#^\s*$|^<[!?]#;
     $tokens->[$$posref++] eq "<$maintag>"
         or &FatalXML($tokens,$$posref,"Expected main tag <$maintag> of object");
 
     my $obj = $self->new();
 
     for (;;) {
-        $$posref++ while $tokens->[$$posref] =~ m#^\s*$|^<[!?]#;
+        $$posref++ while $$posref < @$tokens && $tokens->[$$posref] =~ m#^\s*$|^<[!?]#;
         last if $tokens->[$$posref] eq "</$maintag>";
         $tokens->[$$posref++] =~ m#^<(\w+)(?: struct="(\w+)" type="(\w+)")?(/?)>$#
             or &FatalXML($tokens,$$posref-1,"Expected field tag of object <$maintag>");
@@ -870,7 +875,7 @@ sub XMLTokenArrayToObject {
                 $tokens->[$$posref++] eq "</$field>"
                     or &FatalXML($tokens,$$posref,"Expected to find end tag (scalar field) </$field>")
              } else { # single subobject
-                $$posref++ while $tokens->[$$posref] =~ m#^\s*$|^<[!?]#;
+                $$posref++ while $$posref < @$tokens && $tokens->[$$posref] =~ m#^\s*$|^<[!?]#;
                 if ($tokens->[$$posref] eq "</$field>") { # empty array
                     $$posref++;
                     next;
@@ -884,7 +889,7 @@ sub XMLTokenArrayToObject {
                 $$posref--;
                 my $subobject = $subclass->XMLTokenArrayToObject($tokens,$posref);
                 $obj->{$field} = $subobject;
-                $$posref++ while $tokens->[$$posref] =~ m#^\s*$|^<[!?]#;
+                $$posref++ while $$posref < @$tokens && $tokens->[$$posref] =~ m#^\s*$|^<[!?]#;
                 $tokens->[$$posref++] eq "</$field>"
                     or &FatalXML($tokens,$$posref-1,"Expected to find end tag (single subobject) </$field>")
              }
@@ -898,7 +903,7 @@ sub XMLTokenArrayToObject {
             &FatalXML($tokens,$$posref,"Can't find subclass associated with expected tag <$hasobjects>?")
                 if $hasobjects && ! defined $subclass;
             for (;;) {
-                $$posref++ while $tokens->[$$posref] =~ m#^\s*$|^<[!?]#;
+                $$posref++ while $$posref < @$tokens && $tokens->[$$posref] =~ m#^\s*$|^<[!?]#;
                 if ($tokens->[$$posref] eq "</$field>") {
                     $$posref++;
                     last;
@@ -931,7 +936,7 @@ sub XMLTokenArrayToObject {
             &FatalXML($tokens,$$posref,"Can't find subclass associated with expected tag <$hasobjects>?")
                 if $hasobjects && ! defined $subclass;
             for (;;) {
-                $$posref++ while $tokens->[$$posref] =~ m#^\s*$|^<[!?]#;
+                $$posref++ while $$posref < @$tokens && $tokens->[$$posref] =~ m#^\s*$|^<[!?]#;
                 if ($tokens->[$$posref] eq "</$field>") {
                     $$posref++;
                     last;
@@ -941,7 +946,7 @@ sub XMLTokenArrayToObject {
                 my $key = &_StringDecodeEntities($tokens->[$$posref++]);
                 $tokens->[$$posref++] eq "</key>"
                     or &FatalXML($tokens,$$posref-1,"Expected hash tag </key>");
-                $$posref++ while $tokens->[$$posref] =~ m#^\s*$|^<[!?]#;
+                $$posref++ while $$posref < @$tokens && $tokens->[$$posref] =~ m#^\s*$|^<[!?]#;
                 if ($tokens->[$$posref] eq "<null/>") {
                     $$posref++;
                     $hash->{$key}=undef;  # creates entry that EXISTS, at least.
