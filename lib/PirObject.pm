@@ -36,6 +36,11 @@
 # Revision history:
 #
 # $Log$
+# Revision 1.9  2006/03/17 21:35:21  prioux
+# Improved handling of truncated XML files in input; fixed bug
+# when checking for already-defined methods in superclasses that
+# prevented the "InheritsFrom" directive from working properly.
+#
 # Revision 1.8  2005/06/28 20:37:30  prioux
 # Fixed bug when using InheritsFrom other than the typical "PirObject"
 # keyword.
@@ -353,9 +358,22 @@ sub _LoadDataModelFromFile {
 
     eval $eval;
     if ($@) {
-        die "Error in evaluating the custom methods specified in datamodel file '$filename'.\n" .
-            "The error message was: $@\n" .
-            "The internal code generated from the datamodel file was:\n$eval\n";
+        my $message = $@;
+        my ($linenum) = ($message =~ /line\s+(\d+)/);
+        my $context = "";
+        if ($linenum) {
+            $linenum--;
+            my @perlcode = split(/\n/,$eval);
+            my $from = $linenum - 4; $from = 0          if $from < 0;
+            my $to   = $linenum + 4; $to   = $#perlcode if $to   > $#perlcode;
+            foreach my $n ( $from .. $to ) {
+                $context .= sprintf("%4d: %s\n", $n+1, $perlcode[$n]);
+            }
+        }
+        die "\n" . __PACKAGE__ . ": Error in evaluating the custom methods specified in datamodel file '$filename'.\n" .
+            "The error message was:\n    $message\n" .
+            ($context ? "The code surrounding the first line in error was:\n$context\n" : "");
+        #    "The internal code generated from the datamodel file was:\n$eval\n";
     }
 
     # Add each field to the class.
