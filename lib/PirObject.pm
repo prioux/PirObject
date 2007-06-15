@@ -36,6 +36,12 @@
 # Revision history:
 #
 # $Log$
+# Revision 1.10  2007/02/19 18:47:25  prioux
+# Improved error reporting when a datamodel file contains error in
+# its 'method' section: instead of showing the full code listing
+# of the internally-created package, only the 8 lines surrounding the
+# first line in error are shown.
+#
 # Revision 1.9  2006/03/17 21:35:21  prioux
 # Improved handling of truncated XML files in input; fixed bug
 # when checking for already-defined methods in superclasses that
@@ -207,7 +213,7 @@ sub LoadDataModel {
             "Search path is:\n" . join("\n",@DATAMODEL_PATH,"");
     }
     # Actually, it's impossible for $CurrentTagName to be different from $model...
-    if (! $CurrentTagName ) { # means we loading nothing, it was already loaded...
+    if (! $CurrentTagName ) { # means we don't need to load anything, it was already loaded...
         $CurrentTagName      = $model;
         $CurrentPerlClass    = $XMLTagToPerlClass{$model};
         no strict;
@@ -340,7 +346,7 @@ sub _LoadDataModelFromFile {
     # for the fields.
 
     my $eval = "
-          # The is perl code internally generated and compiled ONCE.
+          # This is perl code internally generated and compiled ONCE.
           # It serves uniquely to add the (optional) custom methods
           # the user supplied in the datamodel file.
 
@@ -832,9 +838,10 @@ sub ObjectXMLDocumentHeader {
 # in $options, which will zap the refered string back to
 # undef (to free memory early before reconstruction starts).
 sub XMLToObject {
-    my $self = shift;
-    my $xml  = shift;   # the string, or better, a ref to the string. Either works.
-    my $options = shift; # 'ZAP' saves memory when string passed as ref.
+    my $self    = shift;
+    my $xml     = shift        # the string, or better, a ref to the string. Either works.
+        || die "No XML text supplied?\n";
+    my $options = shift || ""; # 'ZAP' saves memory when string passed as ref.
 
     my $class = ref($self) || $self;
 
