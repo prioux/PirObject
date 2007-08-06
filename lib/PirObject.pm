@@ -36,6 +36,9 @@
 # Revision history:
 #
 # $Log$
+# Revision 1.11  2007/06/15 18:31:32  prioux
+# Fixed a warning when calling XMLToObject().
+#
 # Revision 1.10  2007/02/19 18:47:25  prioux
 # Improved error reporting when a datamodel file contains error in
 # its 'method' section: instead of showing the full code listing
@@ -637,7 +640,8 @@ sub FileHandleToObject {
         return $obj unless wantarray;
         push(@objects,$obj);
     }
-    @objects;  # when wantarray only
+    return @objects if wantarray; # can be empty
+    return undef; # single objects are returned in loop above; here we have reached EOF in scalar ctx
 }
 
 # Internal use; reads lines from a filehandle until the
