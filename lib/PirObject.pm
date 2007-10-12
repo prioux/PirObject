@@ -36,6 +36,11 @@
 # Revision history:
 #
 # $Log$
+# Revision 1.12  2007/08/06 20:05:24  prioux
+# Fixed tiny bug when calling FileHandleToObject() in a scalar
+# context on a filehandle already at EOF: we now return undef
+# instead of 0.
+#
 # Revision 1.11  2007/06/15 18:31:32  prioux
 # Fixed a warning when calling XMLToObject().
 #
@@ -167,7 +172,7 @@ sub LoadDataModel {
         if $self ne __PACKAGE__;
 
     die "Model name '$model' is not legal, it must be a bareword.\n"
-        unless $model =~ m#^[a-zA-Z]\w+$#;
+        unless $model =~ m#^[a-zA-Z][\w\-]+$#;
 
     my $error_report = "";
     for (my $n=0;$n < @$being_loaded;$n+=2) {
@@ -237,7 +242,7 @@ sub _LoadDataModelFromFile {
 
     print STDERR "DEBUG: Loading file: $filename\n"            if $DEBUG;
 
-    my ($TagName) = ($filename =~ m#\b([a-zA-Z]\w*)\.$MODELFILE_EXTENSION$#o);
+    my ($TagName) = ($filename =~ m#\b([a-zA-Z][\w\-]*)\.$MODELFILE_EXTENSION$#o);
     die "Error: can't figure out XML Tag name from datamodel file '$filename' ?!?\n"
         unless $TagName;
 
@@ -302,7 +307,7 @@ sub _LoadDataModelFromFile {
                 die "Unparsable field definition line in datamodel file '$filename'.\nLine: $line"
                     unless $line =~ m!
                         ^\s*
-                        ([a-zA-Z]\w*)         # Field name
+                        ([a-zA-Z][\w\-]*)         # Field name
                         \s+
                         (single|array|hash)              # structure keyword
                         \s+
@@ -395,6 +400,7 @@ sub _LoadDataModelFromFile {
     }
 
     print STDERR "DEBUG: Finished with file: $filename\n" if $DEBUG > 0;
+    $main::INC{"$TagName.$MODELFILE_EXTENSION"}=$filename;
 
     ($TagName,$PerlClass,$InheritsFrom,@UsedObjects);
 }
@@ -417,16 +423,18 @@ sub _AddField {
     print STDERR "DEBUG: AddField(): Class=$class\tName=$name\tSAH=$sah\tType=$type\tComment=$comment\n" if $DEBUG > 1;
 
     die "Error in _AddField(): Field name '$name' is not correct.\n"
-        unless $name =~ m#^[a-zA-Z]\w*$#;
+        unless $name =~ m#^[a-zA-Z][\w\-]*$#;
     die "Error in _AddField(): Keyword '$sah' is not 'single', 'array' or 'hash'.\n"
         unless $sah  eq "single" or $sah  eq "array" or $sah eq "hash";
     die "Error in _AddField(): Type '$type' is not legal.\n"
         unless $type =~ m!
                         (int[1248]|string|<[a-zA-Z][a-zA-Z0-9]*>)  # allowed types
+
                         !x;
+    (my $subname = $name) =~ tr/-/_/;
     die "Error in _AddField(): Field name '$name' is a reserved method name! (Method name of PirObject?)\n"
-    #    if $class->can($name) || defined &{__PACKAGE__ . "::" . $name};
-        if defined &{__PACKAGE__ . "::" . $name};
+    #    if $class->can($subname) || defined &{__PACKAGE__ . "::" . $subname};
+        if defined &{__PACKAGE__ . "::" . $subname};
     die "Error in _AddField(): Field name '$name' conflicts with a reserved XML tag!\n"
         if $name =~ m#^(key|null|int[1248]|string)$#;
     die "Error in _AddField(): Field name '$name' conflicts with the tag\n" .
@@ -452,16 +460,16 @@ sub _AddField {
     # Code that adds the new access methods
     my $eval = '
         package _C_L_A_S_S;
-        sub _AUTO__N_A_M_E {
+        sub _AUTO__S_U_B_N_A_M_E {
             my $self = shift;
             $self->{"_N_A_M_E"}=$_[0] if @_;
             $self->{"_N_A_M_E"};
         }
-        sub _AUTOGET_get__N_A_M_E {
+        sub _AUTOGET_get__S_U_B_N_A_M_E {
             my $self = shift;
             $self->{"_N_A_M_E"};
         }
-        sub _AUTOSET_set__N_A_M_E {
+        sub _AUTOSET_set__S_U_B_N_A_M_E {
             my $self = shift;
             $self->{"_N_A_M_E"}=$_[0];
         }
@@ -471,15 +479,16 @@ sub _AddField {
     my $AUTO    = "";
     my $AUTOGET = "";
     my $AUTOSET = "";
-    $AUTO       = "AUTO_" if defined &{$class . "::" . "$name"};
-    $AUTOGET    = "AUTO_" if defined &{$class . "::" . "get_$name"};
-    $AUTOSET    = "AUTO_" if defined &{$class . "::" . "set_$name"};
+    $AUTO       = "AUTO_" if defined &{$class . "::" . "$subname"};
+    $AUTOGET    = "AUTO_" if defined &{$class . "::" . "get_$subname"};
+    $AUTOSET    = "AUTO_" if defined &{$class . "::" . "set_$subname"};
     $eval =~ s/_AUTO_/$AUTO/g;
     $eval =~ s/_AUTOGET_/$AUTOGET/g;
     $eval =~ s/_AUTOSET_/$AUTOSET/g;
 
     # Substitude the package name and the field name
     $eval =~ s/_C_L_A_S_S/$class/g;
+    $eval =~ s/_S_U_B_N_A_M_E/$subname/g;
     $eval =~ s/_N_A_M_E/$name/g;
 
     # Add the subroutines
@@ -657,7 +666,7 @@ sub _FindFirstTag {
         return (undef,undef) unless defined $line;
         next if $line =~ m#^\s*$|^\s*<[!?]#;
         die "Unexpected XML line: $line"
-            unless $line =~ m#^\s*<(\w+)>#;
+            unless $line =~ m#^\s*<([\w\-]+)>#;
         $tag=$1;
         return ($tag,$line);
     }
@@ -885,7 +894,7 @@ sub XMLTokenArrayToObject {
     for (;;) {
         $$posref++ while $$posref < @$tokens && $tokens->[$$posref] =~ m#^\s*$|^<[!?]#;
         last if $tokens->[$$posref] eq "</$maintag>";
-        $tokens->[$$posref++] =~ m#^<(\w+)(?: struct="(\w+)" type="(\w+)")?(/?)>$#
+        $tokens->[$$posref++] =~ m#^<([\w\-]+)(?: struct="(\w+)" type="([\w\-]+)")?(/?)>$#
             or &FatalXML($tokens,$$posref-1,"Expected field tag of object <$maintag>");
         my ($field,$struct,$type,$empty) = ($1,$2,$3,$4);
 
@@ -909,7 +918,7 @@ sub XMLTokenArrayToObject {
                     $$posref++;
                     next;
                 }
-                $tokens->[$$posref++] =~ m#^<(\w+)>$#
+                $tokens->[$$posref++] =~ m#^<([\w\-]+)>$#
                     or &FatalXML($tokens,$$posref,"Expect tag for subobject for field <$field>");
                 my $subtag = $1;
                 next if $subtag eq "null";  # <null> is a for a null object. Not important here.
