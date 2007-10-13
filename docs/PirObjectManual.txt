@@ -532,7 +532,18 @@ of the object definition file.
       The first column is the name of the data field, such as
       "firstname" or "city" or "othercharacters". You choose it to
       be appropriate to what kind of data you plan to store in your
-      object.
+      object. It should consist in an identifier that starts with
+      a letter, and is followed by letters, digits, underscores or
+      dashes. For instance, the field name 
+
+          BlastOutput_query-ID
+
+      is acceptable. Note however that if your field name contains
+      a '-' (dash), the corresponding method name for accessing the
+      field will contain a '_' (underscore) in its place; in the
+      previous example, the method to set this field would be
+
+          set_BlastOutput_query_ID()
 
       The second column must contain one of three possible "structural"
       keywords: "single", "array" or "hash". It defines how the field
@@ -749,6 +760,16 @@ Here is the detailed description of all these methods.
              object definition file for the InheritsFrom entry will
              be loaded too.
 
+             The object definition file doesn't have to be a
+             real external file, it can be supplied as a string
+             using a 'fake' or 'virtual' filesystem, as described
+             above for the method DataModelPath();
+
+             Once an object has been loaded and its methods compiled
+             in, you can find out the exact location of the file
+             in the %INC hash table of the main:: package, just like
+             after perl's "require" statement.
+
      b) Object Creation And Access Methods:
 
          new()
@@ -784,6 +805,10 @@ Here is the detailed description of all these methods.
              the value. XXX() will act as either get_XXX() or
              set_XXX() depending on whether or not you supply an
              argument to it.
+
+             If the name of field in the object definition file
+             contained a '-' (dash), the corresponding methods
+             to access it will contain a '_' (underscore) instead.
 
              When the field is defined as an array (see the second
              column of the object definition file), the set_XXX()
@@ -1374,7 +1399,7 @@ well make it better:
   - PomObject's data models where not described in text files (what
     I call here object definition files, with a .pir extension),
     they were instead described in .pm files that were normal Perl
-    subclasses of the main class PomObject. It meant that whoever
+    subclasses of the main class PomObject. It meant that who ever
     was maintaining the object definition files had also to be a Perl
     programmer; with PirObject the data fields can be edited and
     maintained by a non programmer. Except for the custom methods,
@@ -1405,6 +1430,8 @@ well make it better:
     that it did not understand from its input. PirObject doesn't
     yet have this capability: you must strip the unwanted tags
     externally (using grep -v for instance?).
+
+  - PirObject supports field names that contain '-' (dashes).
 
 Limitations:
 
@@ -1462,6 +1489,11 @@ Distribution Information:
 # Revision History:
 #
 # $Log$
+# Revision 1.3  2005/05/16 19:02:16  prioux
+# Updated ObjectXMLDocumentHeader() so that in order to get
+# a standalone document, you need to supply the keyword
+# "standalone". The DTD is generated internally.
+#
 # Revision 1.2  2004/12/21 03:55:46  prioux
 # Added support for object definition files that are supplied
 # internally by the application (they no longer HAVE to be
