@@ -36,6 +36,21 @@
 # Revision history:
 #
 # $Log$
+# Revision 1.13  2007/10/12 23:50:13  prioux
+# Added ability to specify a field name that contains a '-' (dash);
+# this is useful when trying to model external XML files that contain
+# elements with such characters. However this also introduces an ambiguity,
+# as method names to set the fields cannot have dashes, so the method
+# names have a '_' (underscore) instead. It's unlikely that a XML document
+# will have two fields that differ only in the usage of dashes and
+# underscores!
+#
+# When PirObject loads an object description file, it records the actual
+# path of the file in the %INC array of the main:: package, just like
+# a "require" statement do. This is useful to figure out WHERE the
+# files with .pir extensions were actually found after searching
+# the DATAMODEL_PATH.
+#
 # Revision 1.12  2007/08/06 20:05:24  prioux
 # Fixed tiny bug when calling FileHandleToObject() in a scalar
 # context on a filehandle already at EOF: we now return undef
@@ -318,6 +333,7 @@ sub _LoadDataModelFromFile {
                 my ($name,$sah,$type,$comment) = ($1,$2,$3,$4);
                 die "Error: redefinition of field '$name' in datamodel file '$filename'.\n"
                     if exists $Fields{$name};
+                $comment =~ s/\s*$//;
                 $Fields{$name} = [ $sah, $type, $comment ];
                 push(@Fields,$name);
             }
@@ -424,6 +440,8 @@ sub _AddField {
 
     die "Error in _AddField(): Field name '$name' is not correct.\n"
         unless $name =~ m#^[a-zA-Z][\w\-]*$#;
+    die "Error in _AddField(): Field name '$name' cannot have two underscores and/or dashes side by side.\n"
+        if $name =~ m#[_\-][_\-]#;
     die "Error in _AddField(): Keyword '$sah' is not 'single', 'array' or 'hash'.\n"
         unless $sah  eq "single" or $sah  eq "array" or $sah eq "hash";
     die "Error in _AddField(): Type '$type' is not legal.\n"
@@ -1140,7 +1158,8 @@ sub LocalObjectDTD {
     my $fields      = $class->_InfoFields();
     my $fieldsorder = $class->_InfoFieldsOrder();
 
-    my $elemlist = {};
+    my $maxlen = 0; # used for formatted printing with sprintf
+    $maxlen = length($_) > $maxlen ? length($_) : $maxlen foreach @$fieldsorder;
 
     my $numspaces = 60 - length($tag);
     my $numspaces1 = int($numspaces/2);
@@ -1149,58 +1168,71 @@ sub LocalObjectDTD {
               "<!-- " . (" " x $numspaces1) . $tag . (" " x $numspaces2) . " -->\n" .
               "<!-- ************************************************************ -->\n\n";
 
-    $dtd .= "<!ELEMENT $tag ( " .
-            join("? , ",@$fieldsorder) .
-            "? )>\n";
+    $dtd .= "<!ELEMENT $tag (\n";
+    my $maxlenP1 = $maxlen+1; # used for formatted printing with sprintf
+    for (my $i=0;$i<@$fieldsorder;$i++) {
+        my $field = $fieldsorder->[$i];
+        $dtd .= sprintf("    \%-${maxlenP1}s","$field?");
+        $dtd .= " ," if $i < @$fieldsorder-1; # commas after each except the last
+        $dtd .= "\n";
+    }
+    $dtd .= "    )>\n\n";
 
     my $att = "";
+    my $elemlist = {};
 
     foreach my $field (@$fieldsorder) {
         my $info = $fields->{$field};
         my ($sah, $type, $comment, $hasobjects) = @$info;
         my $baretype = $hasobjects || $type;
+        $comment =~ s/--+/- -/g;
+        $comment = " <!-- $comment -->" if $comment ne "";
         if ($sah eq "single") {
             if ($hasobjects) {
-                my $elemdtd = "<!ELEMENT $field ( $baretype? )>\n";
+                my $elemdtd = sprintf("<!ELEMENT \%-${maxlen}s ( \%s? )>",$field,$baretype);
                 $elemlist->{$field} = $elemdtd;
                 $elemdtd =~ s/!ELE/!-- / if $globelemlist->{$field};
-                $dtd .= $elemdtd;
+                $elemdtd =~ s/>$/ -->/   if $globelemlist->{$field};
+                $dtd .= "$elemdtd$comment\n";
                 next if $globelemlist->{$field};
-                $att .= "<!ATTLIST " . $field .                 " struct CDATA #FIXED \"single\"\n";
-                $att .= "          " . (" " x length($field)) . " type   CDATA #FIXED \"$baretype\">\n";
+                $att .= sprintf("<!ATTLIST \%-${maxlen}s struct CDATA #FIXED \"single\"\n",$field);
+                $att .= sprintf("          \%-${maxlen}s type   CDATA #FIXED \"\%s\">\n","",$baretype);
             } else {
-                my $elemdtd = "<!ELEMENT $field ( #PCDATA )>\n";
+                my $elemdtd = sprintf("<!ELEMENT \%-${maxlen}s ( #PCDATA )>",$field);
                 $elemlist->{$field} = $elemdtd;
                 $elemdtd =~ s/!ELE/!-- / if $globelemlist->{$field};
-                $dtd .= $elemlist->{$field};
+                $elemdtd =~ s/>$/ -->/   if $globelemlist->{$field};
+                $dtd .= "$elemdtd$comment\n";
             }
             next;
         }
         if ($sah eq "array") {
-            my $elemdtd = "<!ELEMENT $field ( ($baretype | null)* )>\n";
+            my $elemdtd = sprintf("<!ELEMENT \%-${maxlen}s ( (\%s | null)* )>",$field,$baretype);
             $elemlist->{$field} = $elemdtd;
             $elemdtd =~ s/!ELE/!-- / if $globelemlist->{$field};
-            $dtd .= $elemdtd;
+            $elemdtd =~ s/>$/ -->/   if $globelemlist->{$field};
+            $dtd .= "$elemdtd$comment\n";
             next if $globelemlist->{$field};
-            $att .= "<!ATTLIST " . $field .                 " struct CDATA #FIXED \"array\"\n";
-            $att .= "          " . (" " x length($field)) . " type   CDATA #FIXED \"$baretype\">\n";
+            $att .= sprintf("<!ATTLIST \%-${maxlen}s struct CDATA #FIXED \"array\"\n",$field);
+            $att .= sprintf("          \%-${maxlen}s type   CDATA #FIXED \"\%s\">\n","",$baretype);
             next;
         }
         if ($sah eq "hash") {
-            my $elemdtd = "<!ELEMENT $field ( (key , ($baretype | null))* )>\n";
+            my $elemdtd = sprintf("<!ELEMENT \%-${maxlen}s ( (key , (\%s | null))* )>",$field,$baretype);
             $elemlist->{$field} = $elemdtd;
             $elemdtd =~ s/!ELE/!-- / if $globelemlist->{$field};
-            $dtd .= $elemdtd;
+            $elemdtd =~ s/>$/ -->/   if $globelemlist->{$field};
+            $dtd .= "$elemdtd$comment\n";
             next if $globelemlist->{$field};
-            $att .= "<!ATTLIST " . $field .                 " struct CDATA #FIXED \"hash\"\n";
-            $att .= "          " . (" " x length($field)) . " type   CDATA #FIXED \"$baretype\">\n";
+            $att .= sprintf("<!ATTLIST \%-${maxlen}s struct CDATA #FIXED \"hash\"\n",$field);
+            $att .= sprintf("          \%-${maxlen}s type   CDATA #FIXED \"\%s\">\n","",$baretype);
             next;
         }
     }
 
     &_ReportDTDInconsistencies($tag,$globelemlist,$elemlist);
 
-    $dtd .= $att;
+    $dtd .= "\n" . $att if $att ne "";
 
     $dtd;
 }
@@ -1266,6 +1298,7 @@ sub _ReportDTDInconsistencies { # not a method
 
     foreach my $field (keys %$elemlist) {
         my $def = $elemlist->{$field};
+        $def =~ s/\s+/ /g; # need to make sure spacing is not significant
         $globelemlist->{$field} ||= [];
         my $previnfo = $globelemlist->{$field};
         for (my $n=0;$n < @$previnfo;$n += 2) {
