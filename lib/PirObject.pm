@@ -36,6 +36,11 @@
 # Revision history:
 #
 # $Log$
+# Revision 1.15  2007/11/08 18:36:16  prioux
+# Added the underscore character as an allowed character for a subobject
+# name, in the fields table of the object definition file. Still, I
+# recommend NOT to use such a character in object's name, if possible.
+#
 # Revision 1.14  2007/10/14 05:26:08  prioux
 # The esthetic layout of the DTDs has been greatly improved. Also,
 # they will show the comments that were supplied in the object
@@ -451,9 +456,9 @@ sub _AddField {
         unless $sah  eq "single" or $sah  eq "array" or $sah eq "hash";
     die "Error in _AddField(): Type '$type' is not legal.\n"
         unless $type =~ m!
-                        (int[1248]|string|<[a-zA-Z][a-zA-Z0-9]*>)  # allowed types
-
+                        (int[1248]|string|<[a-zA-Z][a-zA-Z0-9_]*>)  # allowed types
                         !x;
+
     (my $subname = $name) =~ tr/-/_/;
     die "Error in _AddField(): Field name '$name' is a reserved method name! (Method name of PirObject?)\n"
     #    if $class->can($subname) || defined &{__PACKAGE__ . "::" . $subname};
