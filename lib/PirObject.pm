@@ -8,7 +8,7 @@
 ###########################################################
 
 ###########################################################
-#    Copyright (C) 2004 Pierre Rioux
+#    Copyright (C) 2004-2008 Pierre Rioux
 #
 #    This program is free software; you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -36,6 +36,11 @@
 # Revision history:
 #
 # $Log$
+# Revision 1.14  2007/10/14 05:26:08  prioux
+# The esthetic layout of the DTDs has been greatly improved. Also,
+# they will show the comments that were supplied in the object
+# definition file, if possible.
+#
 # Revision 1.13  2007/10/12 23:50:13  prioux
 # Added ability to specify a field name that contains a '-' (dash);
 # this is useful when trying to model external XML files that contain
@@ -326,7 +331,7 @@ sub _LoadDataModelFromFile {
                         \s+
                         (single|array|hash)              # structure keyword
                         \s+
-                        (int[1248]|string|<[a-zA-Z][a-zA-Z0-9]*>)  # allowed types
+                        (int[1248]|string|<[a-zA-Z][a-zA-Z0-9_]*>)  # allowed types
                         \s*
                         (.*)                           # optional comment
                         !x;
