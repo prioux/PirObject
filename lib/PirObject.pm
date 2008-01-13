@@ -36,6 +36,9 @@
 # Revision history:
 #
 # $Log$
+# Revision 1.16  2007/11/08 18:40:36  prioux
+# More support for '_' characters (see previous comment).
+#
 # Revision 1.15  2007/11/08 18:36:16  prioux
 # Added the underscore character as an allowed character for a subobject
 # name, in the fields table of the object definition file. Still, I
@@ -136,8 +139,8 @@ $RCS_VERSION='$Id$';
 
 # Internal data structures; these exist ONLY in this top level class.
    $DEBUG               = 0;   # when true, prints traces.
-my %PerlClassToXMLTag   = ();
-my %XMLTagToPerlClass   = ();
+my %PerlClassToXMLTag   = ( "PirObject" => "PirObject" );
+my %XMLTagToPerlClass   = ( "PirObject" => "PirObject" );
 my %XMLReaderSubCache   = ();
 my $MODELFILE_EXTENSION = "pir";
 
@@ -332,13 +335,13 @@ sub _LoadDataModelFromFile {
                 die "Unparsable field definition line in datamodel file '$filename'.\nLine: $line"
                     unless $line =~ m!
                         ^\s*
-                        ([a-zA-Z][\w\-]*)         # Field name
+                        ([a-zA-Z][\w\-]*)                           # Field name
                         \s+
-                        (single|array|hash)              # structure keyword
+                        (single|array|hash)                         # structure keyword
                         \s+
                         (int[1248]|string|<[a-zA-Z][a-zA-Z0-9_]*>)  # allowed types
                         \s*
-                        (.*)                           # optional comment
+                        (.*)                                        # optional comment
                         !x;
                 my ($name,$sah,$type,$comment) = ($1,$2,$3,$4);
                 die "Error: redefinition of field '$name' in datamodel file '$filename'.\n"
@@ -615,7 +618,7 @@ sub SetMultipleFields {
         my $val   = shift @args;
         die "SetMultipleFields: Error: field '$field' is not defined for object.\n"
             unless $Fields->{$field};
-        $self->{$field}=$val;
+        $self->$field($val);
     }
     $self;
 }
