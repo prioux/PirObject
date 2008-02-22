@@ -36,6 +36,17 @@
 # Revision history:
 #
 # $Log$
+# Revision 1.17  2008/01/13 18:02:36  prioux
+# Added ability to specify, in the fields table of the object model of a
+# class, a type of "PirObject" to represent ANY PirObject. Really useful!
+#
+# Modified the internal behavior of SetMultipleFields(): we now call
+# the appropriate field accession function for each field passed
+# in argument, instead of directly modifying the object's values.
+# This has a slight performance penalty, but allows the user to
+# exploit automatic side-effect associated with overridden set_*
+# methods.
+#
 # Revision 1.16  2007/11/08 18:40:36  prioux
 # More support for '_' characters (see previous comment).
 #
@@ -296,8 +307,14 @@ sub _LoadDataModelFromFile {
 
     my $expect = "PerlClass";
 
+    # We use $linecounter in order to try to synchronize the line
+    # numbers between the REAL .pir file and the $eval string for
+    # the methods that will be created below.
+    my $linecounter = 0;
+
     PARSEFILE:
     while (my $line = shift(@content)) {
+        $linecounter++;
         next if $line =~ m/^\s*$|^\s*#/;
         die "Unexpected line in datamodel file '$filename':\nLine: $line"
             unless $line =~ m#^\s*-\s*(\w+)\s*(\S*)\s*$#;
@@ -330,6 +347,7 @@ sub _LoadDataModelFromFile {
         if ($section eq "FieldsTable") {
             $expect = "Methods";
             while ($line = shift(@content)) {
+                $linecounter++;
                 next if $line =~ m/^\s*$|^\s*#/;
                 last if $line =~ m#^\s*- EndFieldsTable#;
                 die "Unparsable field definition line in datamodel file '$filename'.\nLine: $line"
@@ -382,7 +400,7 @@ sub _LoadDataModelFromFile {
     # At this point, built the code for the methods and store the information
     # for the fields.
 
-    my $eval = "
+    my $eval = << "____EVAL_HEADER____";
           # This is perl code internally generated and compiled ONCE.
           # It serves uniquely to add the (optional) custom methods
           # the user supplied in the datamodel file.
@@ -396,9 +414,19 @@ sub _LoadDataModelFromFile {
           \$FieldsOrder     = [];
           \$ArrayHashFields = {};
 
-          $methods
-          ";
+____EVAL_HEADER____
+    
+    # This paragraph adds some spacer lines in order to sync
+    # the line numbers if $eval with the line numbers for the "methods"
+    my $header_linecount = ($eval =~ tr/\n/\n/); # how many lines
+    my $spacer_to_add    = $linecounter - $header_linecount;
+    $spacer_to_add = 0 if $spacer_to_add < 0;
+    $eval .= "# Spacer\n" x $spacer_to_add;
 
+    # Add the custom methods, if any.
+    $eval .= $methods;
+
+    # Alright, let's compile the code for the new class
     eval $eval;
     if ($@) {
         my $message = $@;
