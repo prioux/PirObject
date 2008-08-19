@@ -36,6 +36,13 @@
 # Revision history:
 #
 # $Log$
+# Revision 1.18  2008/02/22 04:30:29  prioux
+# A tiny improvement: code generated internally is now padded with
+# dummy lines in order to synchronize the line numbering with
+# the content of the "methods" section of the .pir file. This means
+# that syntax errors are reported by perl with the proper, real
+# line numbers of the .pir file. Useful.
+#
 # Revision 1.17  2008/01/13 18:02:36  prioux
 # Added ability to specify, in the fields table of the object model of a
 # class, a type of "PirObject" to represent ANY PirObject. Really useful!
@@ -421,7 +428,7 @@ ____EVAL_HEADER____
     my $header_linecount = ($eval =~ tr/\n/\n/); # how many lines
     my $spacer_to_add    = $linecounter - $header_linecount;
     $spacer_to_add = 0 if $spacer_to_add < 0;
-    $eval .= "# Spacer\n" x $spacer_to_add;
+    $eval .= "\n" x $spacer_to_add;
 
     # Add the custom methods, if any.
     $eval .= $methods;
@@ -596,6 +603,18 @@ sub _InfoArrayHashFields {
     ${$class . "::"}{"ArrayHashFields"} ||= {};
 }
 
+sub PerlClassToXMLTag {  # really, a PirObject root class method
+    my $self      = shift;
+    my $classname = shift;
+    $PerlClassToXMLTag{$classname};
+}
+
+sub XMLTagToPerlClass {  # really, a PirObject root class method
+    my $self      = shift;
+    my $tagname   = shift;
+    $XMLTagToPerlClass{$tagname};
+}
+
 ############################################################################
 # Methods commonly accessed by users
 ############################################################################
@@ -640,12 +659,14 @@ sub SetMultipleFields {
     my @args = @_;
     die "SetMultipleFields: odd number of elements for field/value pairs?!?\n"
         if (scalar(@args) & 1) == 1;
-    my $Fields = $self->_InfoFields();
+    #my $Fields = $self->_InfoFields();
     while (@args) {
         my $field = shift @args;
         my $val   = shift @args;
-        die "SetMultipleFields: Error: field '$field' is not defined for object.\n"
-            unless $Fields->{$field};
+        #die "SetMultipleFields: Error: field '$field' is not defined for object.\n"
+        #    unless $Fields->{$field};
+        die "SetMultipleFields: Error: field '$field' does not have a method associated with it.\n"
+            unless $self->can($field);
         $self->$field($val);
     }
     $self;
@@ -905,7 +926,7 @@ sub ObjectXMLDocumentHeader {
 # This is the main entry point to the methods that convert
 # a XML document stored in a single string back into
 # an in-memory object. For efficiency reasons when parsing
-# very large XMl documents, we suggest that you pass a REF
+# very large XML documents, we suggest that you pass a REF
 # to the XML string, and also provide the "ZAP" keyword
 # in $options, which will zap the refered string back to
 # undef (to free memory early before reconstruction starts).
