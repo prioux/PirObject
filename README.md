@@ -1,5 +1,5 @@
 
-## PirObject: a Perl data model libray
+## PirObject: a Perl data model library
 
 This is Perl library, PirObject.pm, which provides
 a simple way to model data objects.
