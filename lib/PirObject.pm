@@ -165,7 +165,7 @@ my $MODELFILE_EXTENSION = "pir";
 my @DATAMODEL_PATH      = (
     ".",
     "./PirModels",
-    ($ENV{"HOME"} || ".") . "/PirModels",
+    ($ENV{"MFANNOT_HOME"} || $ENV{"HOME"} || ".") . "/PirModels",
 );
 unshift(@DATAMODEL_PATH,split(/:/,$ENV{"PIR_DATAMODEL_PATH"}))
     if $ENV{"PIR_DATAMODEL_PATH"};
